@@ -1,0 +1,67 @@
+﻿Use cWebMenuItem.pkg
+Use mixin_WebFilterManager.pkg
+
+Class csWebFilterMenuItem is a cWebMenuItem
+    Import_Class_Protocol mixin_WebFilterManager
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Send Init_WebFilterManager_Properties
+        Set phMsgFilterManagerObj to Set_phoFilterMenuItem
+
+        Set psCaption  to "Filters"
+        Set psCSSClass to "icon icon-filter"            
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        Handle hoFilterManager 
+        
+        Forward Send End_Construct_Object
+        Send RegisterFilterObject
+        Get FilterManager to hoFilterManager
+        If (hoFilterManager>0) Begin
+            Set pbRender of (Parent(Self)) to (RegisteredFiltersCount(hoFilterManager)>0)
+        End
+    End_Procedure
+    
+    Procedure OnClick
+        Send Popup of ghoWebFilterPanel Self
+    End_Procedure
+End_Class
+
+Class csWebLoadFiltersMenuItem is a cWebMenuItem
+    Import_Class_Protocol mixin_WebFilterManager
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        Send Init_WebFilterManager_Properties
+        Set phMsgFilterManagerObj to Set_phoLoadFilters
+                
+        Set psCaption to "Load"
+        Set psCSSClass to "icon icon-filter_arrow_right"             
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        Handle  hoFilterManager 
+        Boolean bAllowSave
+        
+        Forward Send End_Construct_Object
+        Send RegisterFilterObject
+        Get FilterManager to hoFilterManager
+        If (hoFilterManager>0) Begin
+            Get pbAllowSave of hoFilterManager to bAllowSave
+            Set pbRender to (bAllowSave and RegisteredFiltersCount(hoFilterManager)>0)
+        End
+    End_Procedure
+    
+    Procedure OnClick
+        Handle hoFilterManager 
+        
+        Get FilterManager to hoFilterManager
+        If (hoFilterManager>0) Begin
+            Send LoadSavedFilters of hoFilterManager
+        End
+    End_Procedure    
+End_Class

@@ -1,0 +1,37 @@
+# Normalize text in the repository while retaining Windows line endings for
+# files edited and consumed by the DataFlex Studio.
+* text=auto
+
+# DataFlex source and workspace files
+*.src text eol=crlf linguist-language=DataFlex
+*.pkg text eol=crlf linguist-language=DataFlex
+*.wo  text eol=crlf linguist-language=DataFlex
+*.vw  text eol=crlf linguist-language=DataFlex
+*.dg  text eol=crlf linguist-language=DataFlex
+*.sl  text eol=crlf linguist-language=DataFlex
+*.bp  text eol=crlf linguist-language=DataFlex
+*.rv  text eol=crlf linguist-language=DataFlex
+*.dd  text eol=crlf linguist-language=DataFlex
+*.fd  text eol=crlf linguist-language=DataFlex
+*.inc text eol=crlf linguist-language=DataFlex
+*.tpl text eol=crlf linguist-language=DataFlex
+*.mn  text eol=crlf linguist-language=DataFlex
+*.dfo text eol=crlf linguist-language=DataFlex
+*.sws text eol=crlf linguist-language=JSON
+*.cfg text eol=crlf
+*.xml text eol=crlf
+
+# Web assets and repository documentation
+*.js   text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+
+# Binary assets
+*.eot  binary
+*.ttf  binary
+*.woff binary
+*.ico  binary
+*.png  binary
+*.gif  binary
+*.zip  binary

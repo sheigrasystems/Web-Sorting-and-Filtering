@@ -1,0 +1,38 @@
+# DataFlex compiler and diagnostic output
+*.exe
+*.prn
+*.dep
+*.dbg
+*.trc
+*.log
+*.bak
+*.pkd
+*.pbg
+*.manifest
+
+# Embedded DataFlex database files
+*.dat
+*.k*
+*.vld
+*.hdr
+*.tag
+
+# DataFlex Studio user state and generated metadata
+*.dsk
+*.loc
+*.cch
+*.mtd
+IdeSrc/
+
+# Generated runtime output and local configuration
+Programs/
+Data/
+DDSrc/
+AppSrc/LoginEncryptionKey.inc
+
+# Package dependencies and Web UI files installed into this workspace
+DfPkg/
+AppHtml/WebUI/
+
+# Generated package archives
+*.zip

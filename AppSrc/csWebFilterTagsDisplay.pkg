@@ -1,0 +1,32 @@
+﻿Use cWebHtmlBox.pkg
+Use mixin_WebFilterManager.pkg
+
+Class csWebFilterTagsDisplay is a cWebHtmlBox
+    Import_Class_Protocol mixin_WebFilterManager
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Set psCSSClass to "FiltersbarDisplay"
+        Set pbRender to False
+        Set pbServerOnClick to True
+            
+        Send Init_WebFilterManager_Properties
+        Set phMsgFilterManagerObj to Set_phoFilterTags
+        Send RegisterFilterObject
+    End_Procedure
+    
+    Procedure OnClick String sId String sParam
+        Handle hoFilterManager
+        
+        Get FilterManager to hoFilterManager
+        If (hoFilterManager>0) Begin
+            Send RemoveFilter of hoFilterManager sParam 
+        End
+    End_Procedure
+    
+    Procedure OnLoad
+        Forward Send OnLoad
+        Send SetActionMode (RefProc(OnClick)) scModeProgress "Rebuilding filters ..."
+    End_Procedure    
+End_Class

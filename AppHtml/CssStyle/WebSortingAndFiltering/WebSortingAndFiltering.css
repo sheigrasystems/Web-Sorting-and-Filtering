@@ -1,0 +1,188 @@
+:root {
+    --wsf-icon-color:        #444;
+    --wsf-toolbar-bkg:       #fff;
+    --wsf-toolbar-clr:       #333;
+    
+}
+
+@font-face {
+    font-family: 'dataflex-filters';
+    src: url('Fonts/dataflex-filters.eot?7xz9om');
+    src: url('Fonts/dataflex-filters.eot?7xz9om#iefix') format('embedded-opentype'),
+         url('Fonts/dataflex-filters.ttf?7xz9om') format('truetype'),
+         url('Fonts/dataflex-filters.woff?7xz9om') format('woff'),
+         url('Fonts/dataflex-filters.svg?7xz9om#dataflex-filters') format('svg');
+    font-weight: normal;
+    font-style: normal;
+    font-display: block;
+}
+
+.icon > div > span.WebItm_Icon::before {
+    font-family: 'dataflex-filters' !important;
+    speak: never;
+    font-style: normal;
+    font-weight: normal;
+    font-variant: normal;
+    text-transform: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: var(--wsf-icon-color);
+}
+
+/* ====== Filters bar ====== */
+
+.FiltersbarDisplay.WebControl > .WebCon_Inner {
+    margin: 0px 5px;
+}
+
+.Filtersbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    align-items: center;
+}
+
+/* ====== Filter ====== */
+.Filter {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .28rem .55rem;
+    border-radius: 2px;
+    background: #eef1f4;
+    border: 1px solid #d6dbe1;
+    color: #2f3a45;
+    font-size: .9rem;
+    line-height: 1.2;
+    max-width: 100%;
+}
+
+.Filter-label {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+/* ====== Close button (‘x’) ====== */
+.Filter-close {
+    appearance: none;
+    -webkit-appearance: none;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    width: 1.25rem;
+    height: 1.25rem;
+    line-height: 1.15rem;
+    border-radius: 2px;
+    padding: 0;
+    margin: 0;
+    color: #42526e;
+}
+
+/* Only the ‘x’ highlights on hover */
+.Filter-close:hover {
+    background: #d6dbe1;
+}
+
+/* Keyboard focus ring on the ‘x’ */
+.Filter-close:focus-visible {
+    outline: 2px solid #5b9dd9;
+    outline-offset: 1px;
+}
+
+.icon-filter > div > span.WebItm_Icon::before {
+  content: "\e900";
+}
+.icon-filter_off > div > span.WebItm_Icon::before {
+  content: "\e901";
+}
+.icon-filter_arrow_right > div > span.WebItm_Icon::before {
+  content: "\e904";
+}
+.icon-save > div > span.WebItm_Icon::before {
+  content: "\e905";
+}
+
+
+.WebViewCommandBar .WebMenuItem > div > span.WebItm_Icon {
+    width: 24px;
+}
+
+.WebViewCommandBar .WebMenuItem > div > span.WebItm_Icon:before {
+    font-size: 1.833em;
+    padding: 2px 0px 0px 0px;
+}
+
+.WebViewCommandBar li.icon span.WebItm_Icon::before,
+.WebViewCommandBar li.icon.Web_Enabled:hover span.WebItm_Icon::before {
+    color: var(--wsf-icon-color) !important;
+}
+
+.WebViewCommandBar .WebToolBar ul.WebBarRoot > li.WebItm_BgnGroup,
+.WebViewCommandBar ul.WebBarRoot > li.WebItm_BgnGroup {
+    background: linear-gradient(rgba(0,0,0,.28), rgba(0,0,0,.28)) left center / 1px calc(100% - 12px) no-repeat;
+    margin-left: 6px;
+}
+
+.WebCommandBar.WebViewCommandBar .WebCmd_ToolWrap {
+    background-color: var(--wsf-toolbar-bkg);
+}
+
+.WebCommandBar.WebViewCommandBar.Noshadow .WebCmd_ToolWrap {
+    box-shadow: none;
+}
+
+.WebViewCommandBar .WebToolBar {
+    --df-Txtsize: 0.75rem;
+    font-size: var(--df-TxtSize);
+    color: var(--wsf-toolbar-clr);
+}
+
+.WebViewCommandBar .WebToolBar ul>li.Web_Enabled:hover {
+    background-color: var(--df-Grayscale6);
+}
+
+.WebViewCommandBar .WebToolBar li.SubWebItm > div > span.WebItm_Icon {
+    display: inline-block;
+}
+
+.WebViewCommandBar .WebCmd_ToolWrap .WebToolBar ul > li.SubWebItm > div > a {
+    padding-top: 0px;
+    padding-bottom: 5px;
+}
+
+.WebViewCommandBar.WebGroup.WebGrp_HasBorder > .WebCon_Inner > div > .WebContainer {
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.22);
+}
+
+.WebViewCommandBar.WebGroup.WebGrp_HasBorder > .WebCon_Inner {
+    margin: 5px;
+}
+/* ToDo - is df-MainDark defined? */
+.WebViewCommandBar .WebToolBar .WebMenuItem.FiltersActive .WebItm_Icon {
+    border-bottom: 3px solid var(--df-MainRegular);
+    border-radius: 0;
+}
+
+.WebToolBar.tb-right {
+    float: right;  
+    margin-right: 20px;  
+}
+
+.FilterPanel .WebToolBar {
+    margin-right: 5px; 
+}
+
+.WebWindow.FilterPanel .WebWin_main_c {
+    padding: 10px 6px 10px 6px;
+}
+
+.WebViewCommandBar .WebToolBar .WebMenuItem.Web_Enabled:hover span.WebItm_Icon,
+.WebViewCommandBar .WebToolBar .WebMenuItem.Web_Enabled:focus span.WebItm_Icon{
+    background-color: inherit;
+}
+
+.WebViewCommandBar .WebToolBar ul.WebBarRoot > li > div > span.WebItm_Icon {
+    border: none;
+}

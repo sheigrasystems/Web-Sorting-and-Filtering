@@ -1,0 +1,30 @@
+{
+    "dependencies": [
+        "DataFlex-dev/Web UI#~1.0.0"
+    ],
+    "description": "WebList sorting and SQL filtering controls for DataFlex WebApps.",
+    "df": 26.0,
+    "package": {
+        "df-max": 26.0,
+        "df-min": 26.0,
+        "htmlIncludes": [
+            "CssStyle/WebSortingAndFiltering/WebSortingAndFiltering.css",
+            "CustomControls/WebSortingAndFiltering/sWebModalFloatingPanel.js",
+            "CustomControls/WebSortingAndFiltering/csWebFilterManager.js"
+        ],
+        "install": [
+            "${AppHtml}/CssStyle/WebSortingAndFiltering",
+            "${AppHtml}/CustomControls/WebSortingAndFiltering"
+        ],
+        "license": "MIT",
+        "licenseFile": "LICENSE",
+        "version": "1.0.0"
+    },
+    "projects": [
+        "Library.src"
+    ],
+    "studio": {
+        "DefaultFormHeight": 12
+    },
+    "workspaceName": "Web Sorting and Filtering"
+}

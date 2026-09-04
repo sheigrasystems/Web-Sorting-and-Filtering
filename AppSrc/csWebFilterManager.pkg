@@ -1,0 +1,802 @@
+﻿Use tWebFilter.pkg
+Use cWebObject.pkg
+Use cSqlQuery.pkg
+Use sql.pkg
+
+Use WebFilterPanel.wo
+
+Register_Procedure OnSetFilterField
+
+Class csWebFilterManager is a cWebObject
+    
+    Procedure Construct_Object
+        Integer eMode
+        Handle  hoView
+        
+        Forward Send Construct_Object
+
+        Set psJSClass to "csControls.WebFilterManager"
+
+        { Category = Behavior WebProperty = Server}
+        Property String  psSaveRestoreKey           ""
+        { WebProperty=Client Visibility = Private }
+        Property String  psLocalStorageKey          ""
+        { WebProperty = Server }
+        Property tWebFilter[] paFilters
+        { Visibility = Private }
+        Object oSqlQuery is a cSQLQuery
+        End_Object
+        
+        { Category = "Filter Objects" }
+        Property Handle phoFilterTags
+        { Category = "Filter Objects" }
+        Property Handle phoFilterForm
+        { Category = "Filter Objects" }
+        Property Handle phoFilterMenuItem
+        { Category = "Filter Objects" }
+        Property Handle phoLoadFilters        
+        { Category = "Filter Objects" }
+        Property Handle phoWebList
+
+        Property Handle  phoSQLHelper    (Create(Self,RefClass(cDAWSQLDriverHelper)))
+        Property Handle  phoSqlStatement (Create(Self,RefClass(cSQLStatement)))
+        
+        { Category = "Filter Panel" }
+        Property Integer piFilterPanelLabelOffset   100
+        { Category = "Filter Panel" }
+        Property Integer piFilterPanelWidth         300
+        { Category = "Filter Panel" }
+        Property Boolean pbAllowSave                True        
+  
+        Get ViewObject to hoView
+        If (hoView>0) Begin
+            Get Delegation_Mode  of hoView to eMode
+            Set Delegation_Mode  of hoView to No_Delegate_Or_Error
+            Set phoFilterManager of hoView to Self
+            Set Delegation_Mode  of hoView to eMode
+        End
+    End_Procedure
+
+    Function phoServer Returns Handle
+        Handle hoView hoServer
+        Get ViewObject to hoView
+        Get Main_DD of hoView to hoServer 
+        Function_Return hoServer
+    End_Function
+    
+    { Visibility = Private }
+    Function FirstFoundListObject Handle hoParent Returns Handle
+        Integer iIndex iCount
+        Handle  hoList hoObj
+        
+        Get Child_Count of hoParent to iCount
+        For iIndex from 0 to (iCount-1)
+            Get ChildByIndex of hoParent iIndex to hoObj
+            If (IsObjectOfClass(hoObj,RefClass(cWebList))) Begin
+                Function_Return hoObj
+            End
+            Else Begin
+                Get FirstFoundListObject hoObj to hoList
+            End
+            If (hoList>0) ;
+                Break
+        Loop
+        Function_Return hoList
+    End_Function
+    
+    // if phoWebList is not set, we will attempt to find the first WebList object in the view
+    Function ListObject Returns Handle
+        Handle hoList hoView
+        
+        Get phoWebList to hoList
+        If (hoList=0) Begin
+            Get ViewObject to hoView
+            Get FirstFoundListObject hoView to hoList
+            Set phoWebList to hoList
+        End
+        Function_Return hoList
+    End_Function
+    
+    // Filters are applied - but by default this might be the case without the operator doing anything
+    { Visibility = Private }
+    Function IsActive Returns Boolean
+        tWebFilter[] aFilters
+        Integer i
+        
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            If (aFilters[i].bActive) Begin
+                Function_Return True
+            End
+        Loop
+        Function_Return False
+    End_Function
+    
+    // Filters are applied and have been changed in some way at runtime. IOW the operator has made a change from the default state
+    Function HasFilters Returns Boolean
+        tWebFilter[] aFilters
+        Integer i
+        
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            If (aFilters[i].bActive and aFilters[i].bChanged) Begin
+                Function_Return True
+            End
+        Loop
+        Function_Return False
+    End_Function
+    
+    Function RegisteredFiltersCount Returns Integer
+        tWebFilter[] aFilters
+        
+        Get paFilters to aFilters
+        Function_Return (SizeOfArray(aFilters))
+    End_Function
+    
+    Function FilterTagHtml String sCaption String sFilter String sOnClickParam Returns String[]
+        String[] aHtml
+
+        Move  '    <span Class="Filter">' to aHtml[-1]    
+        Move ('        <span Class="Filter-label">'+sCaption+': '+sFilter+'</span>') to aHtml[-1]   
+        Move  '        <button' to aHtml[-1]    
+        Move  '            type="button"' to aHtml[-1]    
+        Move  '            Class="Filter-close"' to aHtml[-1]    
+        Move ('            aria-label="Remove filter:'+sCaption+'"') to aHtml[-1]     
+        Move  '            data-ServerOnClick="RemoveFilter"' to aHtml[-1]    
+        Move ('            data-OnClickParam="'+sOnClickParam+'"') to aHtml[-1]    
+        Move  '        >&times;</button>' to aHtml[-1]    
+        Move  '    </span>' to aHtml[-1]                               
+        Function_Return aHtml
+    End_Function
+    
+    Procedure UpdateFilterUI
+        Handle  hoFilterMenuItem hoControl hoFilterTags hoFilterForm
+        String  sCssClass sValue
+        Boolean bHasFilters bShowTags
+        Integer i iMin
+        String[] aHtml aTag aValues
+        tWebFilter[] aFilters
+        
+        Get HasFilters to bHasFilters
+        Get phoFilterMenuItem to hoFilterMenuItem
+        If (hoFilterMenuItem>0) Begin
+            Get psCSSClass of hoFilterMenuItem to sCssClass 
+            WebSet psCSSClass of hoFilterMenuItem to (If(bHasFilters,sCssClass*"FiltersActive",sCssClass))  
+        End      
+        Get phoFilterTags to hoFilterTags
+        If (hoFilterTags>0) Begin    
+            WebGet paFilters to aFilters
+            Move '<div class="Filtersbar" aria-label="Active filters">' to aHtml[-1]    
+            Get phoFilterForm to hoFilterForm
+            If (hoFilterForm>0) Begin
+                Get piMinSearchTextLength of hoFilterForm to iMin
+                WebGet psaValues of hoFilterForm to aValues
+                For i from 0 to (SizeOfArray(aValues)-1)
+                    Move aValues[i] to sValue
+                    If (Length(sValue)>=iMin) Begin
+                        Move True to bShowTags
+                        Get FilterTagHtml "Filter Rows" sValue ("-"+String(i+1)) to aTag
+                        Move (AppendArray(aHtml,aTag)) to aHtml 
+                    End                
+                Loop
+            End 
+            For i from 0 to (SizeOfArray(aFilters)-1)
+                If (aFilters[i].bActive and aFilters[i].bChanged) Begin
+                    Move True to bShowTags
+                    Get FilterTagHtml aFilters[i].sName (String(aFilters[i].sDisplay)) (String(i)) to aTag
+                    Move (AppendArray(aHtml,aTag)) to aHtml  
+                End
+            Loop 
+            Move '</div>' to aHtml[-1]    
+            Send UpdateHtmlArray of hoFilterTags aHtml
+            WebSet pbRender of hoFilterTags to bShowTags    
+        End
+    End_Procedure
+
+    Procedure RefreshConstraints
+        tWebFilter[] aFilters
+        Integer i
+        Handle  hoServer hoDD
+        
+        Get phoServer to hoServer
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            Get Which_Data_Set of hoServer aFilters[i].iFile to hoDD
+            If (hoDD>0) Begin
+                Move (ResizeArray(aFilters[i].aConstraints,0)) to aFilters[i].aConstraints
+                Send OnDefineFilterConstraints of hoDD aFilters[i].iColumn (&aFilters[i].aConstraints)    
+            End
+        Loop
+        WebSet paFilters to aFilters
+    End_Procedure
+
+    { Visibility = Private }
+    Procedure DoShowFilters
+        tWebFilter[] aFilters
+        Integer i
+
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            Send OnShowFilter (&aFilters[i])
+        Loop
+        WebSet paFilters to aFilters
+    End_Procedure
+    
+    { MethodType = Event }
+    Procedure OnShowFilter tWebFilter ByRef tFilter
+    End_Procedure
+    
+    Procedure ApplySelectedFilterValues
+        tWebFilter[] aFilters
+        Integer i
+        Handle  hoServer hoDD
+        
+        Get phoServer to hoServer
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            If (aFilters[i].bActive) Begin                
+                Move aFilters[i].sValue to aFilters[i].sFilter
+                Get Which_Data_Set of hoServer aFilters[i].iFile to hoDD
+                If (hoDD>0) Begin
+                    Send OnApplySelectedFilterValue of hoDD (&aFilters[i]) 
+                End
+            End
+        Loop
+        WebSet paFilters to aFilters
+    End_Procedure
+
+    Procedure ClearFilters
+        tWebFilter[] aFilters
+        Integer i
+        
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            Move aFilters[i].sDefault to aFilters[i].sValue
+            Move False to aFilters[i].bChanged
+        Loop
+        WebSet paFilters to aFilters
+    End_Procedure
+
+    Procedure ApplyFilters
+        Handle  hoView
+
+        Get ViewObject to hoView
+        Send UpdateFilterUI
+        Send ShowResults
+    End_Procedure
+    
+    Procedure RemoveFilter Integer iFilterIndex
+        tWebFilter[] aFilters
+        Handle  hoFilterForm
+        Integer i
+        String  sValue
+        String[] aValues
+        
+        If (iFilterIndex>-1) Begin            
+            WebGet paFilters to aFilters
+            Move aFilters[iFilterIndex].sDefault to aFilters[iFilterIndex].sValue
+            Move False to aFilters[iFilterIndex].bActive
+            If (aFilters[iFilterIndex].sDefault <> "" and (aFilters[iFilterIndex].iDF_Type<>DF_BCD or aFilters[iFilterIndex].sDefault<>"0")) Begin
+                Move aFilters[iFilterIndex].sDefault to aFilters[iFilterIndex].sFilter
+                Move True to aFilters[iFilterIndex].bActive
+            End
+            Move (aFilters[iFilterIndex].sDefault <> "" and (aFilters[iFilterIndex].iDF_Type<>DF_BCD or aFilters[iFilterIndex].sDefault<>"0")) to aFilters[iFilterIndex].bActive
+            Move False to aFilters[iFilterIndex].bChanged
+            // and anything that was dependent on this...
+            For i from 0 to (SizeOfArray(aFilters)-1)
+                If (aFilters[i].iFilterDepenency=iFilterIndex) Begin
+                    Move aFilters[i].sDefault to aFilters[i].sValue
+                    Move False to aFilters[i].bActive
+                    If (aFilters[i].sDefault <> "" and (aFilters[i].iDF_Type<>DF_BCD or aFilters[i].sDefault<>"0")) Begin
+                        Move aFilters[i].sDefault to aFilters[i].sFilter
+                        Move True to aFilters[i].bActive
+                    End
+                    Move False to aFilters[i].bChanged
+                End
+            Loop
+            WebSet paFilters to aFilters
+        End
+        Else Begin
+            Get phoFilterForm to hoFilterForm
+            If (hoFilterForm>0) Begin
+                WebGet psaValues of hoFilterForm to aValues
+                Move (Abs(iFilterIndex+1)) to iFilterIndex
+                Move (RemoveFromArray(aValues,iFilterIndex)) to aValues
+                WebSet psaValues of hoFilterForm to aValues
+                WebGet psValue of hoFilterForm to sValue
+                If (SearchArray(sValue,aValues,Desktop,RefFunc(DFSTRICMP))=-1) Begin
+                    WebSet psValue of hoFilterForm to ""    
+                End
+            End
+        End
+        Send ApplyFilters
+    End_Procedure
+    
+    Function FilterFromName String sName Returns tWebFilter
+        Integer i
+        tWebFilter tFilter
+        tWebFilter[] aFilters
+        
+        WebGet paFilters to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            If (Uppercase(aFilters[i].sName)=Uppercase(sName)) Begin
+                Function_Return aFilters[i]    
+            End
+        Loop
+        Function_Return tFilter
+    End_Function
+    
+    Procedure ShowResults
+        Handle  hoWebList hoServer
+        
+        Get ListObject to hoWebList
+        If (hoWebList>0) Begin
+            Send ClearGrid of hoWebList
+            Send FindFromTop of hoWebList
+            Get phoServer to hoServer
+            If (hoServer>0) Begin
+                Send ClearGrid of hoWebList
+                Send RebuildAllConstraints of hoServer
+                Send FindFromTop of hoWebList
+            End
+        End
+    End_Procedure
+
+    Function FreeTextSearchFilter Returns String
+        String  sText sSqlFilter sField sPredBlock sBaseTable sBaseDot sCorrelation
+        Handle  hoFilterForm hoWebList hoServer
+        Integer iCol iFile iField iMin eMode iTable iJoin i
+        Boolean bFilterOnHidden bHidden bVisible bFilter
+        Handle[] hoColumnObjects
+        Integer[] aTables
+        String[] aFieldExprs aPreds aValues
+        String[][] aJoins
+      
+        Get phoFilterForm to hoFilterForm
+        Get ListObject to hoWebList
+    
+        If (hoFilterForm > 0 and hoWebList > 0) Begin
+            WebGet psaValues of hoFilterForm to aValues
+            Get piMinSearchTextLength of hoFilterForm to iMin
+            Move (1 max iMin) to iMin
+            For i from 0 to (SizeOfArray(aValues)-1)
+                Move (Trim(aValues[i])) to sText
+                Move (Length(sText)>=iMin) to bFilter
+                If (bFilter) ;
+                    Break
+            Loop
+            If (bFilter) Begin
+                Get Server of hoWebList to hoServer
+    
+                Get SQLEscapedStr of hoServer sText to sText
+                WebGet pbFilterOnHiddenColumns of hoFilterForm to bFilterOnHidden
+                Get phoColumnObjects of hoWebList to hoColumnObjects
+
+                For iCol from 0 to (SizeOfArray(hoColumnObjects) - 1)
+                    Move bFilterOnHidden to bVisible
+                    If (not(bVisible)) Begin
+                        WebGet pbHidden of hoColumnObjects[iCol] to bHidden
+                        Move (not(bHidden)) to bVisible
+                    End
+                    If (bVisible) Begin
+                        Move "" to sField
+                        Move 0 to iFile
+    
+                        Get Data_File  of hoColumnObjects[iCol] to iFile
+                        Get Data_Field of hoColumnObjects[iCol] to iField
+    
+                        If (iFile > 0 and iField > 0) Begin
+                            Get SQLStrFileFieldName of (Which_Data_Set(hoServer, iFile)) iField to sField
+                        End
+                        Else Begin
+                            Get Delegation_Mode of hoColumnObjects[iCol] to eMode
+                            Set Delegation_Mode of hoColumnObjects[iCol] to No_Delegate_Or_Error
+                            Send OnSetFilterField of hoColumnObjects[iCol] (&sField) (&iFile)
+                            Set Delegation_Mode of hoColumnObjects[iCol] to eMode
+                        End
+    
+                        If (sField > "") Begin
+                            Move (SFormat("COALESCE(RTRIM(CONVERT(NVARCHAR(4000), %1)), N'')", sField)) to aFieldExprs[-1]
+                        End
+    
+                        If (iFile > 0) Begin
+                            If (SearchArray(iFile, aTables) = -1) Begin
+                                Move iFile to aTables[-1]
+                            End
+                        End
+                    End
+                Loop
+    
+                If (SizeOfArray(aFieldExprs) > 0) Begin
+                    For i from 0 to (SizeOfArray(aValues)-1)
+                        Move (Trim(aValues[i])) to sText
+                        If (Length(sText)>=iMin) Begin
+                            If (sPredBlock>"") Begin
+                                Move (sPredBlock+" AND ") to sPredBlock
+                                Move (ResizeArray(aPreds,0)) to aPreds
+                            End
+                            For iCol from 0 to (SizeOfArray(aFieldExprs) - 1)
+                                Move (aFieldExprs[iCol]+" LIKE N'%"+sText+"%'") to aPreds[-1]
+                            Loop
+                            Move (sPredBlock+"("+StrJoinFromArray(aPreds, " OR ")+")") to sPredBlock  
+                        End
+                    Loop 
+                End
+    
+                If (sPredBlock > "") Begin
+                    Get RelationshipSortArray of oSqlQuery aTables to aTables
+                    Get SqlStrFileFieldName of oSqlQuery aTables[0] to sBaseTable
+                    Move (sBaseTable+'.') to sBaseDot
+                    Get PrimaryKeyCorrelationCondition of oSqlQuery aTables[0] '"f"' to sCorrelation
+                    For iTable from 1 to (SizeOfArray(aTables) - 1)
+                        Get StrSqlJoinArray of oSqlQuery aTables[0] aTables[iTable] to aJoins[iTable]
+                        For iJoin from 0 to (SizeOfArray(aJoins[iTable]) - 1)
+                            If (SearchArray(aJoins[iTable][iJoin], aJoins[0]) = -1) Begin
+                                Move aJoins[iTable][iJoin] to aJoins[0][-1]
+                            End
+                        Loop
+                    Loop
+    
+                    If (SizeOfArray(aJoins)>0 and SizeOfArray(aJoins[0])>0) Begin
+                        For iJoin from 0 to (SizeOfArray(aJoins[0]) - 1)
+                            Move (Replaces(sBaseDot, aJoins[0][iJoin], '"f".')) to aJoins[0][iJoin]
+                        Loop
+                        Move (Replaces(sBaseDot, sPredBlock, '"f".')) to sPredBlock
+                        Move ('EXISTS (SELECT 1 FROM '+sBaseTable+' AS "f" LEFT JOIN '+StrJoinFromArray(aJoins[0], ' LEFT JOIN ')+' WHERE '+sPredBlock+' AND '+sCorrelation+')') to sSqlFilter
+                    End
+                    Else Begin
+                        Move sPredBlock to sSqlFilter
+                    End
+                End
+            End
+        End
+        Function_Return sSqlFilter
+    End_Function
+    
+    Function SqlFilter Integer iTable Returns String
+        tWebFilter[] aFilters
+        Boolean bSynching bIsActive
+        String  sSqlFilter sField sWhere sFreeTextFilter sEmpID sDefault sMainTable sCorrelation
+        Integer i iMain_File iFilters iPos iGroup iNumGroups iJoin
+        Handle  hoServer hoDD hoFilterForm   
+        String[] aJoins aConditions
+        Integer[] aGroupFile
+        String[] aGroupWhere
+        String sLocalWhere
+        
+        Move '' to sSqlFilter
+        Move '' to sLocalWhere
+        Move 0  to iNumGroups
+        Get AppSynching to bSynching
+        Get phoServer to hoServer
+        Get Main_File of hoServer to iMain_File
+        If (iMain_File<>iTable) Begin
+            Function_Return sSqlFilter
+        End
+        Get IsActive to bIsActive
+        If (bIsActive) Begin          
+            WebGet paFilters to aFilters
+            Move (SizeOfArray(aFilters)) to iFilters              
+            Move '<='   to aConditions[efLE]
+            Move '<'    to aConditions[efLt]
+            Move '='    to aConditions[efEQ]
+            Move '>='   to aConditions[efGE]
+            Move '>'    to aConditions[efGT]
+            Move '!='   to aConditions[efNE]
+            Move 'like' to aConditions[efBegins]
+            Move 'like' to aConditions[efEnds]
+            Move 'like' to aConditions[efContains]
+            Send SQLNewQuery of oSqlQuery ''
+            For i from 0 to (iFilters-1)
+                If (not(bSynching)) Begin                                        
+                    Get Which_Data_Set of hoServer aFilters[i].iFile to hoDD                      
+                    If (hoDD>0) Begin
+                        Move aFilters[i].sDefault to sDefault
+                        Send OnDefineFilterDefault of hoDD aFilters[i].iColumn aFilters[i].eCondition (&sDefault)
+                        If (sDefault<>aFilters[i].sDefault) Begin
+                            Move True     to aFilters[i].bActive 
+                            Move sDefault to aFilters[i].sDefault
+                            Move sDefault to aFilters[i].sFilter
+                            Move sDefault to aFilters[i].sValue
+                            WebSet paFilters to aFilters   
+                        End
+                    End
+                End 
+                If (aFilters[i].bActive) Begin
+                    Move '' to sWhere                     
+                    Get Which_Data_Set of hoServer aFilters[i].iFile to hoDD
+                    If (hoDD>0) Begin
+                        Send OnBuildSqlFilter of hoDD aFilters[i] (&sWhere)  
+                    End
+                    If (sWhere='' and aFilters[i].iFilterDepenency=-1) Begin  
+                        Get SqlStrFileFieldName of oSqlQuery aFilters[i].iFile aFilters[i].iColumn to sField
+                        Get SQLEscapedStr of hoServer aFilters[i].sFilter to aFilters[i].sFilter
+                        If (aFilters[i].eCondition=efBegins) Begin
+                            Move (aFilters[i].sFilter+'%') to aFilters[i].sFilter
+                        End
+                        Else If (aFilters[i].eCondition=efEnds) Begin
+                            Move ('%'+aFilters[i].sFilter) to aFilters[i].sFilter
+                        End
+                        Else If (aFilters[i].eCondition=efContains) Begin
+                            Move ('%'+aFilters[i].sFilter+'%') to aFilters[i].sFilter
+                        End
+                        If (aFilters[i].iDF_Type=DF_DATE) Begin
+                            If (Pos("'",aFilters[i].sFilter)=0) Begin
+                                Get DFDateToSQLDate of (phoSqlStatement(Self)) (Date(aFilters[i].sFilter)) to aFilters[i].sFilter   
+                            End
+                            Else Begin
+                                Move (Replaces("'",aFilters[i].sFilter,"")) to aFilters[i].sFilter   
+                            End
+                        End
+                        If (aFilters[i].iDF_Type<>DF_BCD) Begin
+                            Move ("'"+aFilters[i].sFilter+"'") to aFilters[i].sFilter
+                            If (aFilters[i].iDF_Type=DF_ASCII) Begin
+                                Move ('N'+aFilters[i].sFilter) to aFilters[i].sFilter
+                            End
+                        End
+                        Move (SFormat("%1 %2 %3",sField,aConditions[aFilters[i].eCondition],aFilters[i].sFilter)) to sWhere
+                    End
+                    If (sWhere<>'') Begin
+                        If (iMain_File<>aFilters[i].iFile and aFilters[i].iFile>0) Begin
+                            Move -1 to iPos
+                            For iGroup from 0 to (iNumGroups-1)
+                                If (aGroupFile[iGroup]=aFilters[i].iFile) Begin
+                                    Move iGroup to iPos
+                                End
+                            Loop
+                            If (iPos=-1) Begin
+                                Move aFilters[i].iFile to aGroupFile[iNumGroups]
+                                Move sWhere            to aGroupWhere[iNumGroups]
+                                Increment iNumGroups
+                            End
+                            Else Begin
+                                Move (aGroupWhere[iPos]+' AND '+sWhere) to aGroupWhere[iPos]
+                            End
+                        End
+                        Else Begin
+                            If (sLocalWhere='') Begin
+                                Move sWhere to sLocalWhere
+                            End
+                            Else Begin
+                                Move (sLocalWhere+' AND '+sWhere) to sLocalWhere
+                            End
+                        End
+                    End
+                End
+            Loop
+            If (sLocalWhere<>'') Begin
+                Send AddWhere of oSqlQuery sLocalWhere
+            End
+            If (iNumGroups>0) Begin
+                Get SqlStrFileFieldName of oSqlQuery iMain_File to sMainTable
+                Get PrimaryKeyCorrelationCondition of oSqlQuery iMain_File '"f"' to sCorrelation
+                For iGroup from 0 to (iNumGroups-1)
+                    Get StrSqlJoinArray of oSqlQuery iMain_File aGroupFile[iGroup] to aJoins 
+                    For iJoin from 0 to (SizeOfArray(aJoins)-1)
+                        Move (Replaces(sMainTable+'.',aJoins[iJoin],'"f".')) to aJoins[iJoin]
+                    Loop
+                    Move ('EXISTS (Select 1 from '+sMainTable+' as "f" INNER JOIN '+StrJoinFromArray(aJoins,' INNER JOIN ')+' WHERE '+aGroupWhere[iGroup]+' AND '+sCorrelation+')') to sWhere 
+                    Send AddWhere of oSqlQuery sWhere
+                Loop
+            End
+            Get SQLQuery of oSqlQuery to sSqlFilter
+            If (Length(sSqlFilter)>0) Begin
+                Move (Replace('where',sSqlFilter,'')) to sSqlFilter
+            End
+        End
+        Get phoFilterForm to hoFilterForm
+        If (hoFilterForm>0) Begin
+            Get FreeTextSearchFilter to sFreeTextFilter
+            If (sFreeTextFilter>"") Begin
+                Get SQLStrAppend of hoServer sSqlFilter sFreeTextFilter to sSqlFilter
+            End                
+        End 
+        If (not(bSynching)) Begin
+            Send UpdateFilterUI
+        End
+        Function_Return sSqlFilter
+    End_Function
+
+    Function SQLStrAppend String sSQLFilter String sValue Returns String
+        Get SQLStrAppend of (phoSQLHelper(Self)) sSqlFilter sValue to sSqlFilter
+        Function_Return sSQLFilter
+    End_Function
+
+    { Visibility = Private }
+    Function LocalStorageKey Returns String
+        String sValueName sSaveRestoreKey
+
+        Get WebObjectName to sValueName
+        WebGet psSaveRestoreKey to sSaveRestoreKey
+        If (sSaveRestoreKey>"") Begin
+            Move (sValueName+'-'+sSaveRestoreKey) to sValueName
+        End
+
+        Function_Return ("csWebFilterManager:"+sValueName)
+    End_Function
+
+    { Visibility = Private }
+    Procedure UpdateSavedFiltersUI Boolean bHasSavedFilters
+        Handle hoLoadFilters
+    
+        Get phoLoadFilters to hoLoadFilters
+        If (hoLoadFilters>0) Begin
+            WebSet pbEnabled of hoLoadFilters to bHasSavedFilters
+        End
+    End_Procedure
+
+    // Returns the current filter layout in a form that can be persisted by the application.
+    Function FilterLayout Returns String
+        tWebFilter[] aFilters
+        String sFilters
+        Handle hoJson
+
+        WebGet paFilters to aFilters
+        Get Create (RefClass(cJsonObject)) to hoJson
+        Send DataTypeToJson of hoJson aFilters
+        Get Stringify of hoJson to sFilters
+        Send Destroy of hoJson
+
+        Function_Return sFilters
+    End_Function
+
+    // Applies a previously persisted filter layout. This can be called after an
+    // OnLoadFilters implementation has selected and retrieved a named layout.
+    Procedure ApplyFilterLayout String sFilters Boolean bFound
+        tWebFilter[] aFilters
+        Handle hoJson
+        Boolean bOk
+
+        Send UpdateSavedFiltersUI bFound
+        If (bFound and sFilters>"") Begin
+            Get Create (RefClass(cJsonObject)) to hoJson
+            Get ParseString of hoJson sFilters to bOk
+            If (bOk) Begin
+                Get JsonToDataType of hoJson to aFilters
+                WebSet paFilters to aFilters
+                Send ApplyFilters
+            End
+            Else Begin
+                Send UserError "The saved filter layout contains invalid JSON." "Load filters"
+            End
+            Send Destroy of hoJson
+        End
+    End_Procedure
+
+    // Set bHandled to True to persist sFilters elsewhere. An implementation may
+    // retain sFilters, prompt for a layout name and complete the save afterwards.
+    { MethodType = Event }
+    Procedure OnSaveFilters String sFilters Boolean ByRef bHandled
+    End_Procedure
+
+    // Set bHandled to True to provide custom loading. An implementation may show
+    // a list of named layouts and call ApplyFilterLayout when one is selected.
+    { MethodType = Event }
+    Procedure OnLoadFilters Boolean ByRef bHandled
+    End_Procedure
+
+    // Reserved for persistence implementations that support deleting saved or
+    // named layouts. There is deliberately no local-storage fallback at present.
+    { MethodType = Event }
+    Procedure OnDeleteSavedFilters Boolean ByRef bHandled
+    End_Procedure
+
+    // Allows a custom persistence implementation to report whether at least one
+    // saved layout exists, so that the Load control can reflect availability.
+    { MethodType = Event }
+    Procedure OnCheckSavedFilters Boolean ByRef bHasSavedFilters Boolean ByRef bHandled
+    End_Procedure
+
+    Procedure SavedFiltersAvailable Boolean bHasSavedFilters
+        Send UpdateSavedFiltersUI bHasSavedFilters
+    End_Procedure
+
+    Procedure CheckSavedFilters
+        Boolean bHasSavedFilters bHandled
+
+        Send OnCheckSavedFilters (&bHasSavedFilters) (&bHandled)
+        If (bHandled) Begin
+            Send SavedFiltersAvailable bHasSavedFilters
+        End
+        // With no custom handler, the existing client-side local-storage class
+        // reports availability through OnLocalStorageStatus.
+    End_Procedure
+
+    Procedure SaveFilters
+        String sKey sFilters
+        String[] aParams
+        Boolean bHandled
+
+        Get FilterLayout to sFilters
+        Send OnSaveFilters sFilters (&bHandled)
+        If (not(bHandled)) Begin
+            Get LocalStorageKey to sKey
+
+            Move sKey     to aParams[0]
+            Move sFilters to aParams[1]
+            Send ClientAction "saveFilters" aParams
+        End
+    End_Procedure
+
+    Procedure LoadSavedFilters
+        String sKey
+        String[] aParams
+        Boolean bHandled
+
+        Send OnLoadFilters (&bHandled)
+        If (not(bHandled)) Begin
+            Get LocalStorageKey to sKey
+            Move sKey to aParams[0]
+            Send ClientAction "loadSavedFilters" aParams
+        End
+    End_Procedure
+
+    Procedure DeleteSavedFilters
+        String sKey
+        String[] aParams
+        Boolean bHandled
+
+        Send OnDeleteSavedFilters (&bHandled)
+        If (not(bHandled)) Begin
+            Get LocalStorageKey to sKey
+            Move sKey to aParams[0]
+            Send ClientAction "removeSavedFilters" aParams
+        End
+    End_Procedure
+
+    Procedure OnLocalStorageStatus Boolean bHasSavedFilters
+        Boolean bCustomHasSavedFilters bHandled
+
+        Send OnCheckSavedFilters (&bCustomHasSavedFilters) (&bHandled)
+        If (bHandled) Begin
+            Send SavedFiltersAvailable bCustomHasSavedFilters
+        End
+        Else Begin
+            Send SavedFiltersAvailable bHasSavedFilters
+        End
+    End_Procedure
+
+    Procedure OnLocalStorageFiltersLoaded String sFilters Boolean bFound
+        Send ApplyFilterLayout sFilters bFound
+    End_Procedure
+
+    Procedure OnLocalStorageError String sOperation String sMessage
+        If (sOperation<>"check") Begin
+            Send UserError ("The browser storage operation failed ("+sOperation+"). "+sMessage) "Browser storage"
+        End
+    End_Procedure
+    
+    Procedure End_Construct_Object
+        tWebFilter[] aFilters
+        Handle[] aDDOs
+        Integer i
+        Handle  hoServer hoView
+        String  sValueName sSaveRestoreKey
+
+        Forward Send End_Construct_Object
+
+        WebPublishProcedure OnLocalStorageStatus
+        WebPublishProcedure OnLocalStorageFiltersLoaded
+        WebPublishProcedure OnLocalStorageError
+
+        Get WebObjectName to sValueName
+        Get psSaveRestoreKey to sSaveRestoreKey
+        If (sSaveRestoreKey>"") Begin
+            Move (sValueName+'-'+sSaveRestoreKey) to sValueName
+        End
+        Set psLocalStorageKey to ("csWebFilterManager:"+sValueName)
+        Get phoServer to hoServer
+        If (hoServer>0) Begin
+            Get ViewObject to hoView
+            Set phoFilterManager of hoView to Self
+            Get paFilters to aFilters       
+            Broadcast Send DDOFilters of hoView (&aDDOs)
+            For i from 0 to (SizeOfArray(aDDOs)-1)
+                If (aDDOs[i]>0) Begin
+                    Send DoRegisterFilters of aDDOs[i] (&aFilters)     
+                End
+            Loop
+            Set paFilters to aFilters
+        End
+    End_Procedure
+End_Class 

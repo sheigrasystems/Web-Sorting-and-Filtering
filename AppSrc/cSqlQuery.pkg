@@ -1,0 +1,451 @@
+﻿Enum_List
+    Define eJoin_Inner
+    Define eJoin_Left
+    Define eJoin_Right
+    Define eJoin_Full
+    Define eJoin_LeftOuter
+    Define eJoin_RightOuter
+    Define eJoin_FullOuter
+End_Enum_List
+
+{ Visibility = Private }
+Struct tdSQLJoin
+    Integer eJoinType
+    String  sTable
+    String  sCondition
+End_Struct
+
+Class cSQLQuery is a cObject
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        { Visibility = Private }
+        Property String psQuery
+        { Visibility = Private }
+        Property tdSQLJoin[] Private_ptaSQLJoins
+        { Visibility = Private }
+        Property String[]    Private_psaWhereClauses
+        { Visibility = Private }
+        Property String[]    Private_psaHavingClauses
+        { Visibility = Private }
+        Property String psGroupBy
+    End_Procedure
+    
+    { Visibility = Private }
+    Procedure TearDown 
+        tdSQLJoin[] taSQLJoins
+        String[]    saWhere saHaving
+        
+        Set psQuery                  to ''
+        Set psGroupBy                to ''
+        Set Private_ptaSQLJoins      to taSQLJoins
+        Set Private_psaWhereClauses  to saWhere
+        Set Private_psaHavingClauses to saHaving
+    End_Procedure
+    
+    { Visibility = Public }
+    Function SqlStrFileFieldName Integer iFile Integer iField Returns String
+        String  sFile sField sQuote sSchema
+        Boolean bOpen
+        
+        Move '"' to sQuote
+        If (iFile>0) Begin
+            Get_Attribute DF_FILE_OPENED of iFile to bOpen  
+            If (bOpen) Begin
+                Get_Attribute DF_FILE_SQL_TABLE_NAME of iFile to sFile
+                Get_Attribute DF_FILE_OWNER of iFile to sSchema
+                If (num_arguments=1) Begin
+                    Function_Return (sQuote+sSchema+sQuote+'.'+sQuote+sFile+sQuote)
+                End
+                Else Begin                    
+                    Get_Attribute DF_FIELD_NAME of iFile iField to sField                     
+                    Function_Return (sQuote+sSchema+sQuote+'.'+sQuote+sFile+sQuote+'.'+sQuote+sField+sQuote)  
+                End
+            End   
+        End
+        Function_Return ""
+    End_Function
+
+    Procedure FindAncestorTables Integer iTable Integer[] ByRef aAncestors
+        Integer iCol iCols iParent iIndex
+        Boolean bOpen
+    
+        Get_Attribute DF_FILE_OPENED of iTable to bOpen
+        If (not(bOpen)) Begin
+            Open iTable
+        End
+        Get_Attribute DF_FILE_NUMBER_FIELDS of iTable to iCols
+        For iCol from 1 to iCols
+            Get_Attribute DF_FIELD_RELATED_FILE of iTable iCol to iParent
+            If (iParent>0) Begin
+                Send FindAncestorTables iParent (&aAncestors)
+            End
+        Loop
+        Move (SearchArray(iTable,aAncestors)) to iIndex
+        If (iIndex=-1) Begin
+            Move iTable to aAncestors[-1]
+        End
+    End_Procedure
+    
+    Function IsAncestorOf Integer iTable Integer iAncestor Returns Boolean
+        Integer[] aTables
+        Send FindAncestorTables iTable (&aTables)
+        Function_Return (SearchArray(iAncestor,aTables)<>-1)
+    End_Function
+
+    Function IsSiblingOf Integer iTable Integer iSibling Returns Boolean
+        Integer[] aTables
+        Send FindAncestorTables iSibling (&aTables)
+        Function_Return (SearchArray(iTable,aTables)<>-1)
+    End_Function 
+    
+    { Visibility = Private }
+    Function RelationshipSortCompare Integer iTable1 Integer iTable2 Returns Integer
+        If (IsAncestorOf(Self,iTable1,iTable2)) ;
+            Function_Return (LT)
+        If (IsSiblingOf(Self,iTable1,iTable2)) ;
+            Function_Return (GT)
+        Function_Return (EQ)
+    End_Function
+    
+    // function to take an array of N table numbers and return the list sorted from child-most ([0]) to parent-most ([N-1])
+    Function RelationshipSortArray Integer[] aTables Returns Integer[]
+        Function_Return (SortArray(aTables,Self,RefFunc(RelationshipSortCompare)))
+    End_Function
+
+    // Pass a "from" and "to" table and it will return the relationship path between these tables
+    Function RelationshipPath Integer iChildTable Integer iAncestorTable Returns Integer[]
+        Integer iTable iTables iParent iChild iIndex
+        Boolean bIsChild
+        Integer[] aAncestors aRelatesPath aChildAncestors
+        
+        // get the complete list of all the ancestors
+        Send FindAncestorTables iChildTable (&aChildAncestors)
+        Move (SizeOfArray(aChildAncestors)) to iTables
+        // look to find the index of the ancestor table
+        Move (SearchArray(iAncestorTable,aChildAncestors)) to iIndex
+        If (iIndex<>-1) Begin
+            Move iAncestorTable to aRelatesPath[0]
+            // start working down the array using this index as the start point
+            Move iIndex to iParent
+            Increment iIndex
+            // look through the resot of the tables checking that the next is a direct child of the previous
+            // if it is, we want it. If it isn't we can discard it.
+            For iTable from iIndex to (iTables-1)
+                Move iTable to iChild
+                Get IsSiblingOf aChildAncestors[iParent] aChildAncestors[iChild] to bIsChild
+                If (bIsChild) Begin
+                    Move aChildAncestors[iChild] to aRelatesPath[-1]
+                    Move iTable to iParent
+                End
+            Loop    
+        End
+        Function_Return aRelatesPath
+    End_Function
+
+    Function StrSqlJoin Integer iTable1 Integer iTable2 Returns String
+        Integer iChild iParent iCol iCols iTable iField
+        Boolean bIsAncestor
+        String  sSqlJoin 
+        
+        Get IsAncestorOf iTable1 iTable2 to bIsAncestor
+        If (bIsAncestor) Begin
+            Move iTable2 to iParent
+            Move iTable1 to iChild    
+        End
+        Else Begin
+            Get IsAncestorOf iTable2 iTable1 to bIsAncestor
+            If (bIsAncestor) Begin
+                Move iTable1 to iParent
+                Move iTable2 to iChild    
+            End
+        End
+        If (bIsAncestor) Begin
+            Get_Attribute DF_FILE_NUMBER_FIELDS  of iChild  to iCols 
+            For iCol from 1 to iCols
+                Get_Attribute DF_FIELD_RELATED_FILE of iChild iCol to iTable
+                If (iTable=iParent) Begin
+                    Get_Attribute DF_FIELD_RELATED_FIELD of iChild iCol to iField 
+                    If (Length(sSqlJoin)>0) Begin
+                        Move (sSqlJoin*'and ') to sSqlJoin
+                    End
+                    Move (sSqlJoin+SqlStrFileFieldName(Self,iParent)*'on'*SqlStrFileFieldName(Self,iParent,iField)+'='+SqlStrFileFieldName(Self,iChild,iCol)) to sSqlJoin
+                End
+            Loop
+        End
+        Function_Return sSqlJoin
+    End_Function
+    
+    Function StrSqlJoinArray Integer iChild Integer iAncestor Returns String[]
+        String[] aJoins
+        Integer[] aTables
+        Integer iTables iJoin
+        
+        Get RelationshipPath iChild iAncestor to aTables
+        Move (SizeOfArray(aTables)) to iTables
+        If (iTables>1) Begin
+            For iJoin from 0 to (iTables-2)
+                Get StrSqlJoin aTables[iJoin+1] aTables[iJoin] to aJoins[iJoin]    
+            Loop    
+        End
+        Function_Return (ReverseArray(aJoins))  // this order makes more sense when joining tables to a query
+    End_Function
+    
+    Function PkColumn Integer iTable Returns String
+        String  sPk
+        Boolean bRecnum
+        Integer iPrimaryIndex iField
+        
+        Get_Attribute DF_FILE_RECNUM_TABLE of iTable to bRecnum
+        If (bRecnum) Begin
+            Get SqlStrFileFieldName iTable 0 to sPk    
+        End
+        Else Begin
+            Get_Attribute DF_FILE_PRIMARY_INDEX of iTable to iPrimaryIndex
+            If (iPrimaryIndex=0) Begin
+                Error DFERR_PROGRAM "Unable to identify primary-key column: the table has no primary index"
+                Function_Return ""
+            End
+            Get_Attribute DF_INDEX_SEGMENT_FIELD of iTable iPrimaryIndex 1 to iField
+            Get SqlStrFileFieldName iTable iField to sPk
+        End
+        Function_Return sPk
+    End_Function
+
+    // Builds the condition that correlates an aliased copy of a table with the
+    // current row of that table. Recnum tables use field 0; standard tables use
+    // every segment of their primary index so that composite keys are supported.
+    Function PrimaryKeyCorrelationCondition Integer iTable String sAlias Returns String
+        Boolean bRecnum
+        Integer iPrimaryIndex iSegments iSegment iField
+        String sField
+        String[] aConditions
+
+        Get_Attribute DF_FILE_RECNUM_TABLE of iTable to bRecnum
+        If (bRecnum) Begin
+            Move 1 to iSegments
+        End
+        Else Begin
+            Get_Attribute DF_FILE_PRIMARY_INDEX of iTable to iPrimaryIndex
+            If (iPrimaryIndex=0) Begin
+                Error DFERR_PROGRAM "Unable to build SQL filter: the main table has no primary index"
+                Function_Return ""
+            End
+            Get_Attribute DF_INDEX_NUMBER_SEGMENTS of iTable iPrimaryIndex to iSegments
+        End
+
+        For iSegment from 1 to iSegments
+            If (bRecnum) Begin
+                Move 0 to iField
+            End
+            Else Begin
+                Get_Attribute DF_INDEX_SEGMENT_FIELD of iTable iPrimaryIndex iSegment to iField
+            End
+            Get_Attribute DF_FIELD_NAME of iTable iField to sField
+            Move (sAlias+'."'+sField+'" = '+SqlStrFileFieldName(Self,iTable,iField)) to aConditions[-1]
+        Loop
+        Function_Return (StrJoinFromArray(aConditions,' AND '))
+    End_Function
+
+    { Visibility = Public }
+    Procedure SQLNewQuery String sQuery
+        Send TearDown
+        Set psQuery to sQuery
+    End_Procedure 
+    
+    { Visibility = Public }
+    Function SqlStrNlcs String sValue Returns String
+        Move (Replaces("'",sValue,"''")) to sValue
+        Move ("N'"-sValue-"'") to sValue  
+        Function_Return sValue
+    End_Function
+
+    { Visibility = Private }
+    Function SqlQueryNlcs String sSql Returns String
+        Integer i iChar iChars iQuotes iCheck
+        String  sText
+        Boolean bNlcs
+        // look to add N (where required) to string literals. 
+        // For example:  Select * from "Table" where "Value" like 'ABC%' 
+        // change to be: Select * from "Table" where "Value" like N'ABC%' 
+        Move (Length(sSql)) to iChars
+        For i from 1 to iChars
+            Move (iChars+1-i) to iChar
+            If (Mid(sSql,1,iChar)="'") Begin
+                Increment iQuotes
+                If (Mod(iQuotes,2)=0) Begin
+                    Case Begin
+                        Case (iChar=1)
+                        Case (Pos(Mid(sSql,1,iChar-1),"'N")=0)
+                            // we look to add the N prefix, but first check to see if this string is simply an A-Z character, or that it contains only numbers.
+                            // if so, we elect to not add the prefix.
+                            If (Length(sText)=1) Begin
+                                Move (Pos(sText,'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')=0) to bNlcs
+                            End
+                            Else Begin
+                                Move False to bNlcs
+                                For iCheck from 1 to (Length(sText))
+                                    If (Pos(Mid(sText,1,iCheck),'0123456789')=0) Begin
+                                        Move True to bNlcs        
+                                    End
+                                    If bNlcs ;
+                                        Break
+                                Loop
+                            End
+                            If (bNlcs) Begin
+                                Move (Insert('N',sSql,iChar)) to sSql  
+                            End
+                            Case Break    
+                    Case End
+                End
+                Move '' to sText
+            End
+            Else Begin
+                Add (Mid(sSql,1,iChar)) to sText
+            End
+        Loop        
+        // finally remove anything obvious that we don't require, such as " N'' " or " as N'Column Heading' "
+        Move (Replaces(" N''",sSql," ''"))           to sSql
+        Get SqlStrNlcsTidy " as N'" sSql " as '"     to sSql
+        Get SqlStrNlcsTidy " THEN N'" sSql " THEN '" to sSql                        
+        Function_Return sSql
+    End_Function
+
+    { Visibility = Private }
+    Function SqlStrNlcsTidy String s String sSource String sWith Returns String
+        Integer iPos
+    
+        Move (Pos(Uppercase(s),Uppercase(sSource))) to iPos
+        While (iPos>0)
+            Move (Overstrike(Uppercase(s),sSource,iPos)) to sSource
+            Increment iPos
+            Move (Pos(Uppercase(s),Uppercase(sSource),iPos)) to iPos    
+        Loop
+        Function_Return (Replaces(Uppercase(s),sSource,sWith))
+    End_Function
+
+    { Visibility = Public }
+    Procedure AddJoin Integer eJoinType String sTable String sCondition
+        Integer iJoins i
+        Boolean bAdd
+        tdSQLJoin[] taSQLJoins
+
+        Get Private_ptaSQLJoins to taSQLJoins
+        Move (SizeOfArray(taSQLJoins)) to iJoins
+        // make sure we don't add the same join twice
+        Move True to bAdd
+        For i from 0 to (iJoins-1)
+            If (eJoinType=taSQLJoins[i].eJoinType and sTable=taSQLJoins[i].sTable and sCondition=taSQLJoins[i].sCondition) Begin
+                Move False to bAdd
+            End
+            If not bAdd ;
+                Break
+        Loop
+        If bAdd Begin
+            Move eJoinType  to taSQLJoins[iJoins].eJoinType
+            Move sTable     to taSQLJoins[iJoins].sTable
+            Move sCondition to taSQLJoins[iJoins].sCondition
+            Set Private_ptaSQLJoins to taSQLJoins
+        End
+    End_Procedure
+
+    { Visibility = Public }
+    Procedure AddHaving String sCondition
+        String[] saHaving
+
+        Get Private_psaHavingClauses to saHaving
+        Move sCondition to saHaving[SizeOfArray(saHaving)]
+        Set Private_psaHavingClauses to saHaving
+    End_Procedure
+    
+    { Visibility = Public }
+    Procedure AddGroupBy String sGrouping
+        Set psGroupBy to sGrouping
+    End_Procedure
+
+    { Visibility = Public }
+    Procedure AddWhere String sWhere
+        String[] saWhere
+        
+        If (sWhere<>"") Begin
+            Get Private_psaWhereClauses to saWhere
+            Get SqlQueryNlcs sWhere to saWhere[SizeOfArray(saWhere)]
+            //Move sWhere to saWhere[SizeOfArray(saWhere)]
+            Set Private_psaWhereClauses to saWhere
+        End
+    End_Procedure
+
+    { Visibility = Public }
+    Function SQLQuery Returns String
+        String  sQuery sGroup
+        Integer i iItems
+        tdSQLJoin[] taSQLJoins
+        String[] saWhere saHaving
+
+        Get psQuery to sQuery       
+        Get Private_ptaSQLJoins      to taSQLJoins
+        Get Private_psaWhereClauses  to saWhere
+        Get Private_psaHavingClauses to saHaving
+        // Joins
+        Move (SizeOfArray(taSQLJoins)-1) to iItems
+        For i from 0 to iItems
+            Case Begin
+                Case (taSQLJoins[i].eJoinType=eJoin_Inner)
+                    Move (sQuery*'inner') to sQuery
+                    Case Break
+                Case (taSQLJoins[i].eJoinType=eJoin_Left)
+                    Move (sQuery*'left') to sQuery
+                    Case Break
+                Case (taSQLJoins[i].eJoinType=eJoin_Right)
+                    Move (sQuery*'right') to sQuery
+                    Case Break
+                Case (taSQLJoins[i].eJoinType=eJoin_Full)
+                    Move (sQuery*'full') to sQuery
+                    Case Break
+                Case (taSQLJoins[i].eJoinType=eJoin_LeftOuter)
+                    Move (sQuery*'left outer') to sQuery
+                    Case Break
+                Case (taSQLJoins[i].eJoinType=eJoin_RightOuter)
+                    Move (sQuery*'right outer') to sQuery
+                    Case Break
+                Case (taSQLJoins[i].eJoinType=eJoin_FullOuter)
+                    Move (sQuery*'full outer') to sQuery
+                    Case Break
+            Case End
+            Move (sQuery*"join"*taSQLJoins[i].sTable*"on"*taSQLJoins[i].sCondition) to sQuery
+        Loop
+
+        Move (SizeOfArray(saWhere)-1) to iItems
+        For i from 0 to iItems
+            Move (sQuery*If(i=0,"where","and")) to sQuery
+            Move (sQuery*saWhere[i]) to sQuery
+        Loop
+        
+        Get psGroupBy to sGroup
+        If (sGroup<>'') Begin
+            Move (sQuery*"Group By"*sGroup) to sQuery
+            Move (SizeOfArray(saHaving)-1) to iItems
+            For i from 0 to iItems
+                Move (sQuery*If(i=0,"Having","and")) to sQuery
+                Move (sQuery*saHaving[i]) to sQuery
+            Loop
+        End
+        Function_Return sQuery
+    End_Function 
+    
+    { Visibility = Public }
+    Function SQLFilter Returns String
+        String  sFilter
+        Integer i iItems
+        String[] saWhere
+
+        Get Private_psaWhereClauses  to saWhere
+        Move (SizeOfArray(saWhere)-1) to iItems
+        For i from 0 to iItems
+            Move (sFilter*If(i=0,"where","and")) to sFilter
+            Move (sFilter*saWhere[i]) to sFilter
+        Loop
+        Function_Return sFilter
+    End_Function
+End_Class

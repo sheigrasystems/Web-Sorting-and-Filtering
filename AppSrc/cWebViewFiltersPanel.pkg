@@ -1,0 +1,13 @@
+﻿Use cWebPanel.pkg
+Use cWebGroup.pkg
+Use cWebCommandbar.pkg
+Use cWebToolbar.pkg
+
+Use csWebListFilterForm.pkg
+Use csWebFilterManager.pkg
+Use csWebListFilterForm.pkg
+Use csWebFilterTagsDisplay.pkg
+Use csWebFilterMenuItem.pkg
+
+Class cWebViewFiltersPanel is a cWebPanel
+End_Class

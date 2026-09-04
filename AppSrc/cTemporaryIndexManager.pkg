@@ -1,0 +1,150 @@
+﻿Global_Variable Handle ghoTemporaryIndexManager
+Move 0 to ghoTemporaryIndexManager
+
+Struct tdTemporaryIndex
+    Integer iTable
+    Integer iCol
+    Integer iIndex
+End_Struct
+
+Struct tdIndexSegment
+    Integer iCol
+    Integer iCase
+    Integer iDirection
+End_Struct
+
+Class cTemporaryIndexManager is a cObject
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        { Visibility=Private }
+        Property tdTemporaryIndex[] paIndexes
+
+        Move Self to ghoTemporaryIndexManager
+    End_Procedure
+    
+    Procedure TearDown
+        tdTemporaryIndex[] aIndexes
+        Integer i
+        
+        Get paIndexes to aIndexes
+        For i from 0 to (SizeOfArray(aIndexes)-1)
+            Delete_Index aIndexes[i].iTable aIndexes[i].iIndex    
+        Loop
+        Set paIndexes to (ResizeArray(aIndexes,0))
+    End_Procedure
+    
+    // Is this a mult-tenancy application? And if so, is there a column on this table that identifies the tenant?
+    // If so we can ensure this becomes the first segment in our new index
+    Function TenantColumn Integer hTable Returns Integer
+        Function_Return -1
+    End_Function
+
+    // If our column has an associated field index we will use the same definition
+    // for our temporary one, but with our column at the front.
+    // If not, we will add our column first and then follow it with the columns from the primary index
+    // we can optionally pass an index definition and it will use this. Otherwise it will try to do its best.
+    // NOTE that if the table has a tenant_id (or equivalent) we make sure THIS is the first segment (followed by all the other segments)
+    Function Request_TemporaryIndex Integer iTable Integer iCol tdIndexSegment[] aIndexDefinition Returns Integer
+        Integer iIndex iCount iSegments iIndxField iSegment iFoundSeg iTenantCol iFoundTenantSeg
+        Boolean bOpen
+        tdTemporaryIndex[] aIndexes
+        tdIndexSegment[] aSegments
+        tdIndexSegment tSegment
+        
+        Get_Attribute DF_FILE_OPENED of iTable to bOpen
+        If (not(bOpen)) Begin
+            Open iTable
+        End  
+        Get paIndexes to aIndexes
+        Move (SizeOfArray(aIndexes)) to iCount
+        // A request operates on one list, and a column has one stable index
+        // definition for that request, so table and column uniquely identify it.
+        For iIndex from 0 to (iCount-1)
+            If (aIndexes[iIndex].iTable=iTable and aIndexes[iIndex].iCol=iCol) Begin
+                Function_Return aIndexes[iIndex].iIndex
+            End
+        Loop
+        If (SizeOfArray(aIndexDefinition)=0) Begin            
+            Move iCol         to tSegment.iCol
+            Move DF_CASE_USED to tSegment.iCase
+            Move DF_ASCENDING to tSegment.iDirection
+            
+            Get_Attribute DF_FIELD_INDEX of iTable iCol to iIndxField
+            If (iIndxField=0) Begin
+                Get_Attribute DF_FILE_PRIMARY_INDEX of iTable to iIndxField
+            End
+            Get_Attribute DF_INDEX_NUMBER_SEGMENTS of iTable iIndxField to iSegments
+            For iSegment from 1 to iSegments
+                Get_Attribute DF_INDEX_SEGMENT_FIELD     of iTable iIndxField iSegment to aSegments[iSegment].iCol
+                Get_Attribute DF_INDEX_SEGMENT_CASE      of iTable iIndxField iSegment to aSegments[iSegment].iCase
+                Get_Attribute DF_INDEX_SEGMENT_DIRECTION of iTable iIndxField iSegment to aSegments[iSegment].iDirection 
+                If (aSegments[iSegment].iCol=iCol) Begin
+                    Move iSegment to iFoundSeg
+                    Move aSegments[iSegment] to tSegment
+                End
+            Loop
+        End
+        Else Begin
+            Move aIndexDefinition[0] to tSegment
+            Move aIndexDefinition to aSegments
+            If (iCol=0) Begin
+                Move tSegment.iCol to iCol
+            End
+        End
+        Get TenantColumn iTable to iTenantCol
+        Move -1 to iFoundTenantSeg
+        If (iTenantCol>0 and iTenantCol<>iCol) Begin
+            // if the table has a tenant_id column we will make sure we add this as the first index segment
+            For iSegment from 0 to (SizeOfArray(aSegments)-1)
+                If (aSegments[iSegment].iCol=iTenantCol) Begin
+                    Move iSegment to iFoundTenantSeg
+                End
+            Loop
+            If (iFoundTenantSeg>=0) Begin
+                // if we found tenant_id as an index segment already, remove it (we will add it again at the front)
+                Move (RemoveFromArray(aSegments,iFoundTenantSeg)) to aSegments
+            End
+        End
+        
+        If ((iFoundSeg=1 and (iTenantCol<=0 or iTenantCol=iCol)) or (iFoundTenantSeg=1 and iFoundSeg=2)) Begin
+            // The index already starts with the sort column, or with tenant followed
+            // by the sort column, so it can be used without alteration.
+            Move iIndxField to iIndex
+        End
+        Else Begin            
+            If (iFoundSeg>0) Begin
+                // in case we removed 2 segments (the focus of the index and the tenant_id) we must adjust for this
+                If (iFoundTenantSeg>=0 and iFoundSeg>iFoundTenantSeg) Begin
+                    Decrement iFoundSeg
+                End         
+                Move (RemoveFromArray(aSegments,iFoundSeg)) to aSegments
+            End
+            Move tSegment to aSegments[0]
+            If (iTenantCol>0 and iTenantCol<>iCol) Begin
+                Move iTenantCol   to tSegment.iCol
+                Move DF_CASE_USED to tSegment.iCase
+                Move DF_ASCENDING to tSegment.iDirection
+                // slot in tenant_id as the first segment
+                Move (InsertInArray(aSegments,0,tSegment)) to aSegments
+            End 
+            Move (SizeOfArray(aSegments)) to iSegments
+           
+            Move 0 to iIndex
+            Create_Index iTable at iIndex
+            Set_Attribute DF_INDEX_NUMBER_SEGMENTS of iTable iIndex to iSegments
+            For iSegment from 1 to iSegments
+                Set_Attribute DF_INDEX_SEGMENT_FIELD     of iTable iIndex iSegment to aSegments[iSegment-1].iCol
+                Set_Attribute DF_INDEX_SEGMENT_CASE      of iTable iIndex iSegment to aSegments[iSegment-1].iCase
+                Set_Attribute DF_INDEX_SEGMENT_DIRECTION of iTable iIndex iSegment to aSegments[iSegment-1].iDirection  
+            Loop
+            Move iTable to aIndexes[iCount].iTable
+            Move iCol   to aIndexes[iCount].iCol
+            Move iIndex to aIndexes[iCount].iIndex
+            
+            Set paIndexes to aIndexes
+        End
+        Function_Return (If(iIndex=0,-1,iIndex))
+    End_Function
+End_Class

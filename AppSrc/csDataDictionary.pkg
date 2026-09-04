@@ -1,0 +1,11 @@
+﻿Use Datadict.pkg
+Use mixin_DDWebFilters.pkg
+
+Class csDataDictionary is a DataDictionary
+    Import_Class_Protocol mixin_DDWebFilters
+        
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Send Init_DDWebFilters
+    End_Procedure
+End_Class

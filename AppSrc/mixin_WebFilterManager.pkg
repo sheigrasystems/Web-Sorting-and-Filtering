@@ -1,0 +1,34 @@
+﻿Use VdfBase.pkg
+Use csWebFilterManager.pkg
+
+Class mixin_WebFilterManager is a Mixin
+    
+    Procedure Init_WebFilterManager_Properties
+        { Category = "Filter Manager" }
+        Property Handle phMsgFilterManagerObj   0
+    End_Procedure
+    
+    Function FilterManager Returns Handle
+        Integer eMode
+        Handle  hoView hoFilterManager
+        
+        Get ViewObject to hoView
+        Get Delegation_Mode  of hoView to eMode
+        Set Delegation_Mode  of hoView to No_Delegate_Or_Error
+        Get phoFilterManager of hoView to hoFilterManager
+        Set Delegation_Mode  of hoView to eMode
+        Function_Return hoFilterManager
+    End_Function
+    
+    Procedure RegisterFilterObject
+        Handle hoView hoFilterManager hMsgFilterManagerObj
+        
+        Get phMsgFilterManagerObj to hMsgFilterManagerObj
+        If (hMsgFilterManagerObj>0) Begin
+            Get FilterManager to hoFilterManager
+            If (hoFilterManager>0) Begin
+                Set hMsgFilterManagerObj of hoFilterManager to Self
+            End
+        End
+    End_Procedure  
+End_Class

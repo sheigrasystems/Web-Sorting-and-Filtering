@@ -1,0 +1,191 @@
+﻿Use cWebModalDialog.pkg
+Use cWebViewStack.pkg
+Use cWebGroup.pkg
+Use cWebLabel.pkg
+Use cWebToolbar.pkg
+Use tWebMenuItem.pkg
+Use cJsonObject.pkg
+
+Struct tWebToolbarBtn
+    String sCaption
+    String sCssClass
+    String sHtmlId
+End_Struct
+
+{ Visibility = Private }
+Class cWebModalFloatingPanelToolbar is a cWebToolBar
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Set pbShowCaption to True
+        Set psCSSClass    to "tb-right"
+        
+        { Category="Appearance" }
+        Property String psWaitMessage       ""          
+    End_Procedure
+    
+    Procedure OnDefineMenu tWebMenuItem[] ByRef aMenu
+        tWebToolbarBtn[] aToolbarButtons    
+        Integer i
+        Boolean bIsReadOnly
+        
+        Get IsViewReadOnly to bIsReadOnly
+        Delegate Get paToolbarButtons to aToolbarButtons
+        For i from 0 to (SizeOfArray(aToolbarButtons)-1)
+            Move aToolbarButtons[i].sCaption  to aMenu[i].sId
+            Move aToolbarButtons[i].sCaption  to aMenu[i].sCaption
+            Move aToolbarButtons[i].sCssClass to aMenu[i].sCSSClass
+            Move aToolbarButtons[i].sHtmlId   to aMenu[i].sHtmlId
+            Move (not(bIsReadOnly))           to aMenu[i].bEnabled      
+        Loop
+        Delegate Send OnMenuDefined (&aMenu)
+    End_Procedure
+    
+    Procedure SetDynamicEnabled
+        Send FullRefresh
+    End_Procedure
+
+    Procedure OnItemClick String sId String sCaption
+        Move (Lowercase(sId)) to sId
+        Delegate Send OnToolbarItemClick sId sCaption
+    End_Procedure
+    
+    Procedure OnLoad
+        String sWaitMessage
+        
+        Forward Send OnLoad
+        Get psWaitMessage to sWaitMessage
+        If (sWaitMessage>"") Begin
+            Send SetActionMode (RefProc(OnItemClick)) scModeProgress sWaitMessage
+        End
+    End_Procedure    
+End_Class
+
+Class cWebModalFloatingPanelHeader is a cWebGroup
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+                        
+        Set piColumnCount to 1  
+        Set pbShowCaption to False
+        Set pbShowBorder  to False
+
+        { Category = "Appearance"}
+        Property String  psCaption
+        { Category = "Appearance"}
+        Property Integer piToolbarWidth 200
+                
+        { DesignTime=False }
+        Property Handle  phoToolbar
+
+        { Visibility = Private }
+        Property tWebToolbarBtn[] paToolbarButtons                        
+    
+        Object oLabelPanel is a cWebPanel
+            Set peRegion to prCenter
+            
+            Object oCaption is a cWebLabel
+                Set psCSSClass to 'LabelCaption'  
+            End_Object
+        End_Object
+        
+        Object oToolbarPanel is a cWebPanel
+            Set peRegion to prRight
+            Set piWidth  to 160
+            
+            Object oCommandBar is a cWebCommandBar
+                Set psCSSClass to "WebViewCommandBar Noshadow"
+                
+                Object oToolbar is a cWebModalFloatingPanelToolbar
+                    Set phoToolbar to Self
+                End_Object   
+            End_Object
+        End_Object
+    End_Procedure
+    
+    Procedure RefreshToolbar
+        Send FullRefresh of (oToolbar(oCommandBar(oToolbarPanel)))
+    End_Procedure
+
+    Procedure AddToolbarButton String sCaption String sCssClass String sHtmlId
+        tWebToolbarBtn[] aToolbarButtons
+        Integer iBtn
+        
+        Get paToolbarButtons to aToolbarButtons
+        Move (SizeOfArray(aToolbarButtons)) to iBtn
+        Move sCaption to aToolbarButtons[iBtn].sCaption
+        Move sCssClass to aToolbarButtons[iBtn].sCssClass
+        If (num_arguments>2) Begin
+            Move sHtmlId to aToolbarButtons[iBtn].sHtmlId
+        End
+        Set paToolbarButtons to aToolbarButtons
+    End_Procedure  
+
+    { MethodType=Event }
+    Procedure OnAddToolbarButtons
+    End_Procedure
+    
+    { MethodType=Event }
+    Procedure OnMenuDefined tWebMenuItem[] ByRef aMenu
+    End_Procedure
+    
+    { MethodType=Event }
+    Procedure OnToolbarItemClick String sId String sCaption
+    End_Procedure
+    
+    Procedure OnLoad
+        Integer iWidth
+        String  sCaption
+        tWebToolbarBtn[] aToolbarButtons
+        
+        Forward Send OnLoad
+        Get piToolbarWidth to iWidth
+        Set piWidth of oToolbarPanel to iWidth
+        Set pbRender of oToolbarPanel to (iWidth>0)
+        Set paToolbarButtons to aToolbarButtons
+        Send OnAddToolbarButtons
+        If (iWidth>0) Begin
+            Send FullRefresh of (oToolbar(oCommandBar(oToolbarPanel)))
+        End
+        Get psCaption to sCaption
+        Set psCaption of (oCaption(oLabelPanel)) to sCaption
+    End_Procedure
+    
+    Procedure SetCaption String sCaption
+        WebSet psCaption of (oCaption(oLabelPanel)) to sCaption
+    End_Procedure
+End_Class
+
+Class csWebModalFloatingPanel is a cWebModalDialog
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        // Hook up the JS class
+        Set psJSClass to "self.sWebModalFloatingPanel"
+
+        { WebProperty = Client }
+        Property Boolean pbDrawerRight      True
+        { WebProperty = Client }
+        Property Boolean pbSlideFromRight   True
+
+        { WebProperty=Client }
+        Property String  psFloatByControl   ""
+        { WebProperty = Client }
+        Property Boolean pbNaturalWidth     False  // piWidth=0 -> match anchor width if False
+        { WebProperty = Client }
+        Property Boolean pbShrinkIfNoSpace  False  // clamp to viewport if True
+                
+        Set pbResizable        to False  
+        Set pbShowCaption      to True  
+        Set pbShowClose        to True
+        Set peLayoutType       to ltGrid
+        Set piColumnCount      to 24
+        Set piWidth            to 800
+        Set piMinHeight        to 700
+        Set pbServerOnEscape   to True 
+        Set piTop              to 58      // adjust to position directly under the main WebApp Header Panel   
+        Set pbFocusFirstOnShow to False
+    End_Procedure
+End_Class

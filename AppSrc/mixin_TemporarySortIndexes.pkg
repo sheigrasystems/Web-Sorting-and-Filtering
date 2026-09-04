@@ -1,0 +1,71 @@
+﻿Use VdfBase.pkg
+Use cTemporaryIndexManager.pkg
+
+Class mixin_TemporarySortIndexes is a Mixin
+    
+    Procedure Define_TemporarySortIndexes_Properties
+        { Category="Sorting" }
+        Property Boolean pbSortByTempIndex  True
+    End_Procedure
+    
+    // Event can be used to request a specific index definition. Otherwise the framework will create one for you.
+    { MethodType=Event }
+    Procedure OnRequestIndexDefinition tdIndexSegment[] ByRef aIndexSegments
+    End_Procedure
+    
+    // Helper function
+    Function DefineSegment Integer iCol Integer iDirection Integer iCase Returns tdIndexSegment
+        tdIndexSegment tSegment
+        
+        Move iCol         to tSegment.iCol
+        Move DF_ASCENDING to tSegment.iDirection
+        Move DF_CASE_USED to tSegment.iCase
+        If (num_arguments>1) Begin
+            Move iDirection to tSegment.iDirection
+        End
+        If (num_arguments>2) Begin
+            Move iCase to tSegment.iCase
+        End
+        Function_Return tSegment
+    End_Function
+
+    Function piDefaultIndex Returns Integer
+        Handle  hoServer  
+        Integer iTable iCol iMain iIndex
+        Boolean bDataAware bSortByTempIndex
+        tdIndexSegment[] aIndexSegments
+        
+        Forward Get piDefaultIndex to iIndex
+        Delegate Get Server to hoServer
+        Delegate Get pbDataAware to bDataAware
+        Get pbSortByTempIndex to bSortByTempIndex
+        If (bDataAware and bSortByTempIndex and hoServer>0 and ghoTemporaryIndexManager>0) Begin
+            Send OnRequestIndexDefinition (&aIndexSegments)
+            Get Main_File of hoServer to iMain
+            Get Data_File to iTable
+            If (iTable=iMain or SizeOfArray(aIndexSegments)>0) Begin
+                Get Data_Field to iCol
+                Get Request_TemporaryIndex of ghoTemporaryIndexManager iMain iCol aIndexSegments to iIndex 
+            End
+        End
+        Function_Return iIndex
+    End_Function 
+    
+    Procedure RequestColumnLookup String sSearchText
+        Integer iOldOrdering iNewOrdering
+        Handle  hoServer
+        
+        Delegate Get Server to hoServer
+        If (hoServer>0) Begin            
+            Get Ordering of hoServer to iOldOrdering
+            Get piDefaultIndex to iNewOrdering
+            Set Ordering of hoServer to iNewOrdering
+        End
+        Forward Send RequestColumnLookup sSearchText
+        If (hoServer>0) Begin
+            Set Ordering of hoServer to iOldOrdering
+        End
+    End_Procedure    
+    
+    
+End_Class

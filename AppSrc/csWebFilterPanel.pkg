@@ -1,0 +1,456 @@
+﻿Use csWebModalFloatingPanel.pkg
+Use cWebButton.pkg
+Use cWebDynamicObjectContainer.pkg
+Use cWebCombo.pkg
+Use cWebForm.pkg
+Use cWebCheckbox.pkg
+Use cWebDateForm.pkg
+Use tWebFilter.pkg
+Use cWebGroup.pkg
+Use cWebToolbar.pkg
+Use cWebMenuItem.pkg
+
+Use cSqlQuery.pkg
+Use mixin_WebFilterManager.pkg
+
+Register_Procedure ClearFilters
+Register_Procedure ApplyFilters
+Register_Procedure CloseFilters
+
+Global_Variable Handle ghoWebFilterPanel
+Move 0 to ghoWebFilterPanel
+
+{ Visibility = Private }
+Class csWebFilterPanelButton is a cWebButton
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Property Handle phmMsgOnClick
+    End_Procedure
+    
+    Procedure OnClick
+        Handle hMsg
+        Get phmMsgOnClick to hMsg
+        If (hMsg>0) Begin
+            Delegate Send hMsg
+        End
+    End_Procedure
+End_Class
+
+{ Visibility = Private }
+Class csWebFilterPanelForm is a cWebForm
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set piColumnSpan  to 12
+        Set piColumnIndex to 0
+    End_Procedure
+    
+    Function DisplayValue Returns String
+        String sValue
+        WebGet psValue to sValue
+        Function_Return sValue
+    End_Function
+End_Class
+
+{ Visibility = Private }
+Class csWebFilterPanelCombo is a cWebCombo
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set piColumnSpan   to 12
+        Set piColumnIndex  to 0
+        Set pbAddEmptyItem to False
+        
+        { WebProperty=Server DesignTime = False}
+        Property String[] psaConstraints   // currently cannot use [][] as it isn't supported. So, we'll pass a single dimension array but separate codes and descriptions with ;
+    End_Procedure
+
+    Procedure RefillCombo
+        String sValue
+        WebGet psValue to sValue
+        Send Refill
+        WebSet psValue to sValue
+    End_Procedure
+
+    Procedure OnFill
+        Integer i
+        String[] aConstraints
+        
+        WebGet psaConstraints to aConstraints
+        For i from 0 to (SizeOfArray(aConstraints)-1)
+            Send AddComboItem (Left(aConstraints[i],Pos(';',aConstraints[i])-1)) (Right(aConstraints[i],Length(aConstraints[i])-Pos(';',aConstraints[i])))
+        Loop
+    End_Procedure 
+    
+    Function DisplayValue Returns String
+        String  sValue
+        Integer i
+        String[] aConstraints
+        
+        WebGet psaConstraints to aConstraints
+        WebGet psValue to sValue
+        For i from 0 to (SizeOfArray(aConstraints)-1)
+            If (Left(aConstraints[i],Length(sValue+";"))=sValue+";") Begin
+                Function_Return (Replace(sValue+';',aConstraints[i],''))    
+            End
+        Loop
+        Function_Return sValue
+    End_Function    
+End_Class
+
+{ Visibility = Private }
+Class csWebFilterPanelDate is a cWebDateForm
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set piColumnSpan    to 12
+        Set piColumnIndex   to 0
+    End_Procedure
+    
+    Function DisplayValue Returns String
+        String sValue
+        WebGet psValue to sValue
+        Function_Return sValue
+    End_Function
+End_Class
+
+{ Visibility = Private }
+Class csWebFilterPanelCheckbox is a cWebCheckbox
+
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set piColumnSpan  to 12
+        Set piColumnIndex to 0
+    End_Procedure
+    
+    Function DisplayValue Returns String
+        Boolean bValue
+        Get GetChecked to bValue
+        Function_Return (If(bValue,'Yes','No'))
+    End_Function    
+End_Class
+
+{ Visibility = Private }
+Class csWebFilterPanelDynamicFilters is a cWebDynamicObjectContainer
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        Set piColumnCount to 12
+    End_Procedure
+
+    { Visibility = Private }
+    Function FormatComboValues Variant[][] aConstraints Returns String[]
+        String[] aComboData
+        Integer i
+        
+        For i from 0 to (SizeOfArray(aConstraints)-1)
+            Move (SFormat("%1;%2",aConstraints[i][0],aConstraints[i][1])) to aComboData[-1]    
+        Loop
+        Function_Return aComboData
+    End_Function
+         
+    { Visibility = Private }
+    Function ObjectNameFromLabel String sLabel Returns String
+        Move (Replaces(' ',sLabel,'')) to sLabel
+        Move (Replaces('#',sLabel,'')) to sLabel
+        Move (Replaces('$',sLabel,'')) to sLabel
+        Function_Return ('o'+sLabel)
+    End_Function
+         
+    Procedure OnCreate
+        Integer i iClassId iConstraints iDimensions iPrecision iLabelOffset
+        Handle  hoObj hoFilterManager
+        Boolean bCheckbox
+        String[] aComboData
+        tWebFilter[] aFilters
+        
+        Send ResetContainer
+        Delegate Get piFilterLabelOffset to iLabelOffset
+        Delegate Get FilterManager to hoFilterManager
+        If (hoFilterManager > 0) Begin            
+            WebGet paFilters of hoFilterManager to aFilters
+            For i from 0 to (SizeOfArray(aFilters)-1)  
+                Move False to bCheckbox
+                Move 0 to iClassId
+                Move (SizeOfArray(aFilters[i].aConstraints)) to iConstraints
+                If (iConstraints>0) Begin
+                    If (iConstraints=2) Begin
+                        Move (SizeOfArray(aFilters[i].aConstraints[0])) to iDimensions
+                        If (iDimensions=1) Begin
+                            Move (RefClass(csWebFilterPanelCheckbox)) to iClassId
+                            Move True to bCheckbox 
+                        End
+                    End
+                    If (iClassId=0) Begin
+                        Move (RefClass(csWebFilterPanelCombo)) to iClassId     
+                    End
+                End
+                Else Begin
+                    Move (If(aFilters[i].iDF_Type=DF_DATE,RefClass(csWebFilterPanelDate),RefClass(csWebFilterPanelForm))) to iClassId
+                End
+                If (iClassId>0) Begin
+                    Get CreateDynamicObject iClassId (ObjectNameFromLabel(Self,aFilters[i].sName)) '' to hoObj
+                    Send InitDynamicProp of hoObj (If(bCheckbox,'psCaption','psLabel')) (aFilters[i].sName-If(bCheckbox,'',':'))
+                    Send InitDynamicProp of hoObj 'psValue' aFilters[i].sValue
+                    If (bCheckbox) Begin
+                        Send InitDynamicProp of hoObj 'psChecked'   aFilters[i].aConstraints[0][0]
+                        Send InitDynamicProp of hoObj 'psUnchecked' aFilters[i].aConstraints[1][0]
+                    End
+                    Else If (iConstraints>0) Begin
+                        Get FormatComboValues aFilters[i].aConstraints to aComboData
+                        Send InitDynamicProp of hoObj 'psaConstraints' aComboData
+                    End
+                    If (aFilters[i].iDF_Type=DF_BCD and iClassId=RefClass(csWebFilterPanelForm)) Begin
+                        Get_Attribute DF_FIELD_PRECISION of aFilters[i].iFile aFilters[i].iColumn to iPrecision
+                        Send InitDynamicProp of hoObj 'peDataType'  typeNumber
+                        Send InitDynamicProp of hoObj 'piPrecision' iPrecision
+                    End
+                    If (not(bCheckbox)) Begin
+                        Send InitDynamicProp of hoObj 'piLabelOffset' iLabelOffset
+                    End
+                    WebSet pbRender of hoObj to (not(aFilters[i].bHidden))
+                End
+            Loop
+            Get CreateDynamicObject (RefClass(cWebSpacer)) "oWebSpacer" '' to hoObj
+            Send InitDynamicProp of hoObj 'piHeight' 16
+            Send SaveCurrentFilterValues 
+        End
+        Send Activate
+    End_Procedure
+    
+    Procedure OnRefresh
+        tWebFilter[] aFilters
+        Integer i
+        String  sName
+        Handle  hoFilterManager hoObj
+
+        Get FilterManager to hoFilterManager
+        WebGet paFilters of hoFilterManager to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            Get ObjectNameFromLabel aFilters[i].sName to sName
+            Get DynamicObject sName to hoObj
+            If (hoObj>0 and IsObjectOfClass(hoObj,RefClass(csWebFilterPanelCombo))) Begin
+                WebSet psaConstraints of hoObj to (FormatComboValues(Self,aFilters[i].aConstraints))
+                Send RefillCombo of hoObj      
+            End
+        Loop
+    End_Procedure
+    
+    { Visibility = Private }
+    Procedure SaveCurrentFilterValues
+        Handle hoFilterManager hoObj
+        tWebFilter[] aFilters
+        Integer i
+        String  sName
+        
+        Get FilterManager to hoFilterManager
+        WebGet paFilters of hoFilterManager to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            Get ObjectNameFromLabel aFilters[i].sName to sName
+            Get DynamicObject sName to hoObj
+            If (hoObj>0) Begin
+                WebGet psValue of hoObj   to aFilters[i].sValue
+                Get DisplayValue of hoObj to aFilters[i].sDisplay
+                Move aFilters[i].sValue   to aFilters[i].sFilter
+                Move (aFilters[i].sValue<>aFilters[i].sDefault) to aFilters[i].bChanged
+                Case Begin
+                    Case (aFilters[i].iDF_Type=DF_DATE and (not(IsNullDateTime(aFilters[i].sValue))))
+                    Case (aFilters[i].iDF_Type=DF_BCD and aFilters[i].sValue > 0)
+                    Case (aFilters[i].iDF_Type=DF_ASCII and aFilters[i].sValue > '')
+                        Move True to aFilters[i].bActive
+                        Case Break
+                    Case Else
+                        Move False to aFilters[i].bActive
+                Case End  
+            End
+        Loop
+        // test for dependencies..
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            If (aFilters[i].iFilterDepenency>-1) Begin
+                If (aFilters[aFilters[i].iFilterDepenency].bActive=False) Begin
+                    Move False to aFilters[i].bActive
+                    Move False to aFilters[i].bChanged
+                    Move aFilters[i].sDefault to aFilters[i].sFilter
+                    Move aFilters[i].sDefault to aFilters[i].sValue   
+                End
+            End
+        Loop
+        WebSet paFilters of hoFilterManager to aFilters
+        Send ApplySelectedFilterValues of hoFilterManager
+    End_Procedure
+End_Class
+
+{ Visibility=Private }
+Class csWebFilterPanelHeader is a cWebModalFloatingPanelHeader
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Set piColumnSpan   to 12
+        Set psCaption      to "Filters"
+        Set piRowIndex     to 0
+        Set piToolbarWidth to 250
+        
+        Set psWaitMessage of (phoToolbar(Self)) to "Rebuilding filters ..." 
+    End_Procedure
+    
+    Procedure OnAddToolbarButtons
+        Handle  hoFilterManager
+        Boolean bAllowSave
+        
+        Delegate Get FilterManager to hoFilterManager
+        Get pbAllowSave of hoFilterManager to bAllowSave
+        If (bAllowSave) Begin
+            Send AddToolbarButton "Save"  "icon icon-save"
+        End
+        Send AddToolbarButton "Clear" "icon icon-filter_off"
+        Send AddToolbarButton "Apply" "icon icon-filter"
+    End_Procedure 
+            
+    Procedure OnToolbarItemClick String sId String sCaption
+        Move (Lowercase(sId)) to sId
+        If (sId="apply") Begin
+            Delegate Send ApplyFilters
+        End
+        Else If (sId="clear") Begin
+            Delegate Send ClearFilters
+        End
+        Else If (sId="save") Begin
+            Delegate Send SaveFilters
+        End
+    End_Procedure
+End_Class
+
+Class csWebFilterPanel is a csWebModalFloatingPanel
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+        
+        Move Self to ghoWebFilterPanel
+        
+        Set piWidth          to 300
+        Set pbDrawerRight    to False
+        Set pbSlideFromRight to False
+        Set piTop            to 0
+        Set piMinHeight      to 0
+        Set piColumnCount    to 12
+        Set psCSSClass       to "FilterPanel"
+        Set psCaption        to "Filter Panel"
+            
+        Object oHeaderPanel is a csWebFilterPanelHeader                  
+        End_Object 
+
+        Object oDynamicFilters is a csWebFilterPanelDynamicFilters
+            Set piColumnSpan to 12
+        End_Object
+    End_Procedure
+    
+    Function FilterManager Returns Handle
+        String sReturnObj
+        Handle hoObj hoView hoFilterManager
+        
+        WebGet psReturnObject to sReturnObj
+        Get WebObjectByName sReturnObj to hoObj
+        Get ViewObject of hoObj to hoView
+        Get phoFilterManager of hoView to hoFilterManager
+        Function_Return hoFilterManager
+    End_Function
+    
+    Function piFilterLabelOffset Returns Integer
+        Handle  hoFilterManager
+        Integer iOffset
+        
+        Get FilterManager to hoFilterManager
+        If (hoFilterManager>0) Begin
+            Get piFilterPanelLabelOffset of hoFilterManager to iOffset
+            Function_Return iOffset    
+        End
+        Function_Return 100
+    End_Function
+
+    Procedure SaveCurrentFilterValues
+        Send SaveCurrentFilterValues of oDynamicFilters
+    End_Procedure
+    
+    Procedure ClearFilters
+        tWebFilter[] aFilters
+        Integer i
+        Handle  hoFilterManager hoObj
+        
+        Get FilterManager to hoFilterManager
+        Send ClearFilters of hoFilterManager
+        WebGet paFilters of hoFilterManager to aFilters
+        For i from 0 to (SizeOfArray(aFilters)-1)
+            Get DynamicObject of oDynamicFilters (ObjectNameFromLabel(oDynamicFilters,aFilters[i].sName)) to hoObj
+            If (hoObj>0) Begin
+                WebSet psValue of hoObj to aFilters[i].sDefault
+            End
+        Loop
+        Send ApplyFilters False
+    End_Procedure
+    
+    Procedure ApplyFilters Boolean bClose
+        Handle  hoFilterManager
+
+        Send SaveCurrentFilterValues
+        Get FilterManager to hoFilterManager
+        If (hoFilterManager>0) Begin 
+            Send ApplyFilters of hoFilterManager
+        End
+        If (num_arguments=0 or bClose) Begin
+            Send CloseFilters
+        End
+    End_Procedure
+
+    Procedure SaveFilters
+        Handle  hoFilterManager
+
+        Send SaveCurrentFilterValues
+        Get FilterManager to hoFilterManager
+        Send SaveFilters of hoFilterManager
+    End_Procedure
+    
+    Procedure CloseFilters 
+        Send Ok
+    End_Procedure
+    
+    Procedure RemoveFilter Integer iIndex
+        tWebFilter[] aFilters
+        Handle  hoFilterManager hoObj
+        
+        Get FilterManager to hoFilterManager
+        Send ClearFilters of hoFilterManager
+        WebGet paFilters of hoFilterManager to aFilters
+        Get DynamicObject of oDynamicFilters (ObjectNameFromLabel(oDynamicFilters,aFilters[iIndex].sName)) to hoObj
+        If (hoObj>0) Begin
+            WebSet psValue of hoObj to aFilters[iIndex].sDefault
+        End
+        Send ApplyFilters False
+    End_Procedure
+    
+    Procedure Popup Handle hoReturnObject
+        Handle  hoView hoFilterManager hoFilterMenuItem
+        Integer eMode iWidth
+        String  sFloatByControl
+        
+        Get ViewObject of hoReturnObject to hoView
+        Get Delegation_Mode  of hoView to eMode
+        Set Delegation_Mode  of hoView to No_Delegate_Or_Error
+        Get phoFilterManager of hoView to hoFilterManager
+        Set Delegation_Mode  of hoView to eMode
+        If (hoFilterManager>0) Begin
+            Get piFilterPanelWidth of hoFilterManager to iWidth
+            WebSet piWidth to iWidth
+            Get phoFilterMenuItem of hoFilterManager to hoFilterMenuItem
+            If (hoFilterMenuItem>0) Begin
+                Get WebObjectName of hoFilterMenuItem to sFloatByControl 
+                WebSet psFloatByControl to sFloatByControl   
+            End
+        End
+        Forward Send Popup hoReturnObject
+        Send RefreshConstraints of hoFilterManager
+        Send DoShowFilters of hoFilterManager
+        Send OnCreate of oDynamicFilters
+    End_Procedure    
+End_Class

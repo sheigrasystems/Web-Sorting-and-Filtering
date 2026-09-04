@@ -1,0 +1,4 @@
+﻿Use csWebFilterPanel.pkg
+
+Object oWebFilterPanel is a csWebFilterPanel
+End_Object

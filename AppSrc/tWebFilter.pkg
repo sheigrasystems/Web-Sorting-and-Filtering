@@ -1,0 +1,18 @@
+﻿Use FilterConditions.pkg
+
+Struct tWebFilter
+    String  sName
+    Integer iFile
+    Integer iColumn
+    Integer iFilterDepenency    // typically not used. Gets set to -1 as filter is registered. But if set to >0 this filter will only be seen as active if the identified filter is itself active.
+    Integer eCondition              
+    Integer iDF_Type
+    String  sValue              // value as set within the control. This is NOT the same as sDisplay, as it could be a WebCombo where sValue=Code sDisplay=Description
+    String  sDefault            // sValue <> sDefault tells us a filter has been changed.
+    String  sFilter             // value as will be applied when building the filter.     
+    String  sDisplay
+    Boolean bActive
+    Boolean bChanged
+    Boolean bHidden
+    Variant[][] aConstraints    // filter may be a combo which will need filling or a Checkbox for which we need to define the T/F values.
+End_Struct

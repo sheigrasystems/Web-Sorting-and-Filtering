@@ -1,0 +1,75 @@
+﻿Use cWebForm.pkg
+Use mixin_WebFilterManager.pkg
+
+Class csWebListFilterForm is a cWebForm
+    Import_Class_Protocol mixin_WebFilterManager
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        { Category = "WebList" }
+        Property Integer piMinSearchTextLength      2
+        { Category = "WebList" WebProperty = Server}
+        Property Boolean pbFilterOnHiddenColumns    False
+
+        { WebProperty=Server Visibility=Private }
+        Property String[] psaValues
+        
+        Set pbShowLabel   to False
+        Set psPlaceHolder to "Filter Rows"
+        
+        Send Init_WebFilterManager_Properties
+        Set phMsgFilterManagerObj to Set_phoFilterForm
+        Send RegisterFilterObject
+    End_Procedure
+    
+    Procedure RebuildFilters
+        String  sValue
+        Handle  hoView hoFilterManager
+        Integer iMin eMode iIndex i
+        String[] aValues aEntered
+        
+        WebGet psValue to sValue                           
+        Move (Trim(sValue)) to sValue
+        If (Left(sValue,1)='"' and Right(sValue,1)='"') Begin
+            Move (Mid(sValue,Length(sValue)-2,2)) to aEntered[0]
+        End
+        Else Begin
+            Move (StrSplitToArray(sValue," ")) to aEntered
+        End                      
+        Get piMinSearchTextLength to iMin 
+        WebGet psaValues to aValues 
+        For i from 0 to (SizeOfArray(aEntered)-1)
+            Move aEntered[i] to sValue
+            If (Length(sValue)>=iMin) Begin
+                Move (SearchArray(sValue,aValues,Desktop,RefFunc(DFSTRICMP))) to iIndex
+                If (iIndex=-1) Begin
+                    Move sValue to aValues[-1]        
+                End
+            End
+        Loop        
+        WebSet psaValues to aValues
+        Get ViewObject to hoView
+        If (hoView>0) Begin
+            Get Delegation_Mode  of hoView to eMode
+            Set Delegation_Mode  of hoView to No_Delegate_Or_Error
+            Get phoFilterManager of hoView to hoFilterManager
+            Set Delegation_Mode  of hoView to eMode
+            If (hoFilterManager>0) Begin
+                Send ShowResults of hoFilterManager      
+            End
+        End      
+    End_Procedure
+    
+    Procedure OnLoad
+        Forward Send OnLoad
+        Send SetActionMode (RefProc(RebuildFilters)) scModeProgress "Rebuilding filters ..."
+        Send AddKeyHandler (RefProc(RebuildFilters))  9 False False False
+        Send AddKeyHandler (RefProc(RebuildFilters)) 13 False False False
+    End_Procedure  
+    
+    Procedure End_Construct_Object
+        WebPublishProcedure RebuildFilters
+        Forward Send End_Construct_Object
+    End_Procedure
+End_Class

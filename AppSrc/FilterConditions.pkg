@@ -1,0 +1,11 @@
+﻿Enum_List
+    Define efLE
+    Define efLT
+    Define efEQ
+    Define efGE
+    Define efGT
+    Define efNE
+    Define efBegins
+    Define efEnds
+    Define efContains
+End_Enum_List

@@ -1,0 +1,12 @@
+﻿Use cWebColumn.pkg
+Use mixin_TemporarySortIndexes.pkg
+
+Class csWebColumn is a cWebColumn
+    Import_Class_Protocol mixin_TemporarySortIndexes
+    
+    Procedure Construct_Object
+        Forward Send Construct_Object
+
+        Send Define_TemporarySortIndexes_Properties
+    End_Procedure
+End_Class

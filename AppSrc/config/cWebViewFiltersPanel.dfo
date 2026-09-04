@@ -1,0 +1,49 @@
+{ Category = Filters }
+Property Handle phoFilterManager
+
+Object
+    Set peRegion to prTop
+
+    Object oFilterManager is a csWebFilterManager
+        Set piFilterPanelLabelOffset to 120
+        Set piFilterPanelWidth       to 320
+    End_Object
+
+    Object oFilterPanelGroup is a cWebGroup
+        Set pbShowCaption to False
+        Set psCSSClass    to "WebViewCommandBar"
+               
+        Object oFreeFormFilterPanel is a cWebPanel
+            Set peRegion to prLeft
+            Set piWidth  to 300
+            
+            Object oSearchForm is a csWebListFilterForm
+            End_Object
+        End_Object
+        
+        Object oFiltersPanel is a cWebPanel
+            Object oWebCommandBar is a cWebCommandBar
+                Set psCSSClass to "WebViewCommandBar Noshadow"
+                
+                Object oWebToolBar is a cWebToolBar
+                    Set pbShowCaption to True
+                    Set pbRender      to False
+
+                    Object oFilterButton is a csWebFilterMenuItem
+                    End_Object   
+     
+                    Object oLoadFiltersButton is a csWebLoadFiltersMenuItem
+                    End_Object 
+                End_Object 
+            End_Object
+        End_Object
+    End_Object
+    
+    Object oAppliedFilters is a csWebFilterTagsDisplay
+        Set piColumnSpan to 0
+    End_Object 
+End_Object
+
+// Required view property - add to subclass?
+//{ Category = Filters }
+//Property Handle phoFilterManager

@@ -1,0 +1,142 @@
+﻿Use VdfBase.pkg
+Use tWebFilter.pkg
+
+Register_Function SqlFilter Returns String
+Register_Function phoWebList Returns Handle
+
+Class mixin_DDWebFilters is a Mixin
+    
+    Procedure Init_DDWebFilters
+        Set pbUseDDSQLFilters to True    
+    End_Procedure
+    
+    Procedure DDOFilters Handle[] ByRef aDDOs
+        Move Self to aDDOs[-1]
+    End_Procedure
+    
+    Function phoFilterManager Returns Handle
+        Handle  hoView hoFilterManager
+        Integer eMode
+        
+        Get ViewObject to hoView
+        If (hoView>0) Begin
+            Get Delegation_Mode  of hoView to eMode
+            Set Delegation_Mode  of hoView to No_Delegate_Or_Error
+            Get phoFilterManager of hoView to hoFilterManager
+            Set Delegation_Mode  of hoView to eMode   
+        End
+        Function_Return hoFilterManager
+    End_Function
+    
+    Procedure OnConstrain
+        Forward Send OnConstrain
+#IFDEF Is$WebApp        
+        Handle  hoFilterManager
+        String  sSqlFilter
+        Boolean bUseSqlFilters
+        Integer iFile 
+        
+        Get Main_File to iFile
+        Get phoFilterManager to hoFilterManager
+        Get pbUseDDSQLFilters to bUseSqlFilters
+        If (hoFilterManager>0 and bUseSqlFilters) Begin
+            Get SqlFilter of hoFilterManager iFile to sSqlFilter
+            Set psSQLFilter to sSqlFilter    
+        End
+#ENDIF
+    End_Procedure
+                   
+    // Filter Framework
+    { Visibility = Private }
+    Procedure DoRegisterFilters tWebFilter[] ByRef aFilters
+        Send OnRegisterFilters (&aFilters)
+    End_Procedure
+    
+    // Helper function for when building filter constraints
+    { Visibility = Public }
+    Procedure DefineFilterConstraint Variant[][] ByRef aConstraints Variant vCode Variant vDescription
+        Integer iConstraints
+        Move (SizeOfArray(aConstraints)) to iConstraints
+        Move vCode        to aConstraints[iConstraints][0]
+        If (num_arguments>2) Begin
+            Move vDescription to aConstraints[iConstraints][1]
+        End
+    End_Procedure
+
+    { Visibility = Public }
+    Function FilterConstraint String sData String sDesc Returns Variant[]
+        Variant[] aConstraint
+        
+        Move sData to aConstraint[0]
+        Move sData to aConstraint[1]
+        If (num_arguments>1) Begin
+            Move sDesc to aConstraint[1]
+        End
+        Function_Return aConstraint
+    End_Function
+        
+    { Visibility = Public }
+    Procedure RegisterFilter tWebFilter[] ByRef aFilters String sName Integer iColumn Integer eCondition String sInitialValue
+        Integer iFilter iFile iDF_Type
+        
+        Get Main_File to iFile
+        If (iColumn>-1) Begin
+            Get_Attribute DF_FIELD_TYPE of iFile iColumn to iDF_Type
+        End
+        If (eCondition=efBegins or eCondition=efContains or eCondition=efEnds) Begin
+            If (iDF_Type<>DF_ASCII) Begin
+                Error DFERR_PROGRAM 'Filer condition not appropriate for data type'
+            End
+        End
+        Move (SizeOfArray(aFilters)) to iFilter
+        Move sName      to aFilters[iFilter].sName
+        Move iFile      to aFilters[iFilter].iFile
+        Move iColumn    to aFilters[iFilter].iColumn
+        Move eCondition to aFilters[iFilter].eCondition
+        Move iDF_Type   to aFilters[iFilter].iDF_Type
+        Case Begin
+            Case (iDF_Type=DF_BCD)
+                Move "0" to aFilters[iFilter].sValue
+                Case Break
+            Case Else
+                Move "" to aFilters[iFilter].sValue
+        Case End
+        If (num_arguments>4) Begin
+            Move sInitialValue to aFilters[iFilter].sValue
+            Move sInitialValue to aFilters[iFilter].sFilter
+            If (sInitialValue<>"") Begin
+                Move True to aFilters[iFilter].bActive
+            End
+        End
+        Move aFilters[iFilter].sValue to aFilters[iFilter].sDefault
+        Move -1 to aFilters[iFilter].iFilterDepenency
+        Send OnFilterRegistered (&aFilters[iFilter])
+    End_Procedure
+    
+    { MethodType = Event Visibility = Public }
+    Procedure OnFilterRegistered tWebFilter ByRef tFilter 
+    End_Procedure
+    
+    { MethodType = Event Visibility = Public }
+    Procedure OnRegisterFilters tWebFilter[] ByRef aFilters
+        // Send RegisterFilter (&aFilters) (RefTable(Table.Column)) (efEQ)
+    End_Procedure
+    
+    { MethodType = Event Visibility = Public }
+    Procedure OnDefineFilterDefault Integer iColumn Integer eCondition String ByRef sDefault
+    End_Procedure
+    
+    { MethodType = Event Visibility = Public }
+    Procedure OnDefineFilterConstraints Integer iColumn Variant[][] ByRef aConstraints
+    End_Procedure
+            
+    // called before filters are built. Use this event when our filters isn't a simple 'table.column' {some condition} 'value' 
+    { MethodType = Event Visibility = Public }
+    Procedure OnBuildSqlFilter tWebFilter tFilter String ByRef sWhere
+    End_Procedure
+    
+    // use this event if - for example - the selected value is a recnum and we need to find the corresponding code value 
+    { MethodType = Event Visibility = Public }
+    Procedure OnApplySelectedFilterValue tWebFilter ByRef tFilter
+    End_Procedure        
+End_Class

@@ -1,0 +1,10 @@
+Object
+End_Object
+
+// IMPORTANT: Add the following Send to the application's EXISTING
+// OnReleaseProcess procedure. Do not create a second OnReleaseProcess:
+// when a method is defined twice, the later definition replaces the first.
+//
+// Procedure OnReleaseProcess
+//     Send TearDown of ghoTemporaryIndexManager
+// End_Procedure
